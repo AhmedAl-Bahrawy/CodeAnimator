@@ -32,7 +32,6 @@ function App() {
   const createProject = useProjectStore(s => s.createProject);
   const updateScene = useProjectStore(s => s.updateScene);
   const setTimeline = useTimelineStore(s => s.setTimeline);
-  const setSkin = useUISkinStore(s => s.setSkin);
 
   const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'preview'>('editor');
   const [showPresets, setShowPresets] = useState(false);
@@ -47,6 +46,10 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Always apply default skin CSS variables on mount first
+      const defaultSkin = getUISkinById('midnight');
+      applySkinToDocument(defaultSkin);
+
       try {
         const saved = await loadAllProjects();
         if (cancelled) return;
@@ -63,7 +66,7 @@ function App() {
             const skin = getUISkinById(savedSkinId);
             if (skin) {
               applySkinToDocument(skin);
-              setSkin(savedSkinId);
+              useUISkinStore.setState({ currentSkinId: savedSkinId });
             }
           }
         } else {

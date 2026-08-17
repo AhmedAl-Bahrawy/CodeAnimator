@@ -35,6 +35,7 @@ export function ExportPanel() {
 
   const [selectedPreset, setSelectedPreset] = useState('youtube-shorts');
   const [exportStatus, setExportStatus] = useState('');
+  const [exportError, setExportError] = useState('');
 
   const currentProject = useProjectStore(s => {
     return s.projects.find(p => p.id === s.currentProjectId) || null;
@@ -71,21 +72,34 @@ export function ExportPanel() {
       markupEvents,
     });
 
+    setExportError('');
     startExport();
     setExportStatus('Preparing export...');
 
     try {
-      const exporter = selectExporter(format);
-      if (!exporter.isSupported) {
-        setExportStatus(`Export format ${format.toUpperCase()} is not supported in this browser.`);
-        cancelExport();
+      let exporter;
+      try {
+        exporter = selectExporter(format);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'No exporter available';
+        setExportStatus('Export failed');
+        setExportError(msg);
+        finishExport();
         return;
       }
+
+      if (!exporter.isSupported) {
+        setExportStatus('Export not supported');
+        setExportError(`Export format ${format.toUpperCase()} is not supported in this browser.`);
+        finishExport();
+        return;
+      }
+
       setExportStatus(`Exporting via ${exporter.tierName}...`);
 
       const background = getBackgroundById(currentScene.backgroundPresetId);
 
-        const blob = await exporter.export(
+      const blob = await exporter.export(
         {
           timeline,
           source: cleanSource,
@@ -117,16 +131,26 @@ export function ExportPanel() {
       URL.revokeObjectURL(url);
 
       setExportStatus('Export complete!');
-      setTimeout(() => finishExport(), 1000);
+      setExportError('');
+      setTimeout(() => finishExport(), 1500);
     } catch (err) {
       console.error('Export failed:', err);
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      setExportStatus(`Export failed: ${msg}`);
-      cancelExport();
+      setExportStatus('Export failed');
+      setExportError(msg);
+      // Don't call finishExport() — keep progress bar visible so user sees the error
+      // User must click Cancel to dismiss
     }
   };
 
+  const handleDismissError = () => {
+    setExportError('');
+    setExportStatus('');
+    finishExport();
+  };
+
   const bestTier = detectBestTier();
+  const hasError = !!exportError;
 
   return (
     <div className="space-y-4 p-4">
@@ -225,18 +249,31 @@ export function ExportPanel() {
         </span>
       </div>
 
-      {/* Export Button */}
-      {isExporting ? (
+      {/* Export Status / Error */}
+      {isExporting && (
         <div className="space-y-3">
           <Progress value={progress} className="h-2" />
           <div className="flex justify-between items-center">
-            <span className="text-xs text-[var(--text-muted)]">{exportStatus}</span>
-            <Button variant="destructive" size="sm" onClick={cancelExport} className="text-xs">
-              Cancel
+            <div className="flex-1 min-w-0">
+              <span className="text-xs text-[var(--text-muted)]">{exportStatus}</span>
+              {exportError && (
+                <p className="text-xs text-[var(--danger)] mt-1 break-words">{exportError}</p>
+              )}
+            </div>
+            <Button
+              variant={hasError ? 'default' : 'destructive'}
+              size="sm"
+              onClick={hasError ? handleDismissError : cancelExport}
+              className="text-xs shrink-0 ml-2"
+            >
+              {hasError ? 'Dismiss' : 'Cancel'}
             </Button>
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Export Button */}
+      {!isExporting && (
         <Button onClick={handleExport} className="w-full" size="lg">
           <svg className="w-4 h-4 mr-2" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M8 2v8m0 0l-3-3m3 3l3-3M2 12h12" />

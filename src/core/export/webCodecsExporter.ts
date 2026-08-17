@@ -2,6 +2,22 @@ import type { Exporter, ExportOptions, CodeToken } from '@/core/types';
 import { highlightCode } from '@/core/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
 
+async function checkCodecSupport(codec: string, width: number, height: number): Promise<boolean> {
+  try {
+    if (!('VideoEncoder' in window)) return false;
+    const result = await VideoEncoder.isConfigSupported({
+      codec,
+      width,
+      height,
+      bitrate: 8_000_000,
+      framerate: 30,
+    });
+    return result.supported === true;
+  } catch {
+    return false;
+  }
+}
+
 export const webCodecsExporter: Exporter = {
   tierName: 'webcodecs',
   isSupported: typeof window !== 'undefined' && 'VideoEncoder' in window,
@@ -10,10 +26,39 @@ export const webCodecsExporter: Exporter = {
     const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, format } = opts;
 
     if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
-      throw new Error('WebCodecs not supported');
+      throw new Error('WebCodecs not supported in this browser');
     }
 
     onProgress(2);
+
+    // Determine best supported codec
+    const webmCodec = 'vp09.00.10.08';
+    const mp4Codec = 'avc1.42001e';
+
+    let codec: string;
+    let mimeType: string;
+
+    if (format === 'webm') {
+      if (await checkCodecSupport(webmCodec, width, height)) {
+        codec = webmCodec;
+        mimeType = 'video/webm';
+      } else {
+        throw new Error('VP9 codec not supported. Try using MediaRecorder fallback or a different browser.');
+      }
+    } else {
+      // mp4 — try H.264, fall back to VP9 in WebM container
+      if (await checkCodecSupport(mp4Codec, width, height)) {
+        codec = mp4Codec;
+        mimeType = 'video/mp4';
+      } else if (await checkCodecSupport(webmCodec, width, height)) {
+        codec = webmCodec;
+        mimeType = 'video/webm';
+      } else {
+        throw new Error('No supported video codec found. Try WebM format or a different browser.');
+      }
+    }
+
+    onProgress(3);
 
     // Pre-compute Shiki tokens on main thread (Shiki can't run in workers)
     let allTokenLines: CodeToken[][] | null = null;
@@ -61,9 +106,6 @@ export const webCodecsExporter: Exporter = {
       },
     });
 
-    const codec = format === 'webm' ? 'vp09.00.10.08' : 'avc1.42001e';
-    const mimeType = format === 'webm' ? 'video/webm' : 'video/mp4';
-
     encoder.configure({
       codec,
       width,
@@ -87,11 +129,12 @@ export const webCodecsExporter: Exporter = {
         onProgress(5 + Math.round((frame.frameIndex / totalFrames) * 85));
       }
     } catch (err) {
+      coordinator.terminate();
+      encoder.close();
       if (err instanceof Error && err.message.includes('cancelled')) {
-        // Export was cancelled
-      } else {
-        throw err;
+        return new Blob([], { type: mimeType });
       }
+      throw err;
     }
 
     await encoder.flush();

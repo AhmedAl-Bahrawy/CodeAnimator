@@ -79,6 +79,8 @@ export function CanvasPreview() {
       setHighlightResult(cached);
       return;
     }
+    // Clear stale tokens immediately so canvas shows plain text while loading
+    setHighlightResult(null);
     let cancelled = false;
     highlightCode(currentScene.sourceWithMarkup, currentScene.language, currentTheme.shikiTheme || 'dracula')
       .then(result => {
@@ -86,7 +88,9 @@ export function CanvasPreview() {
         cache.set(cacheKey, result);
         setHighlightResult(result);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('Shiki highlight failed:', err);
+      });
     return () => { cancelled = true; };
   }, [currentScene?.sourceWithMarkup, currentScene?.language, currentTheme]);
 

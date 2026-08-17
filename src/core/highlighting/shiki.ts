@@ -3,6 +3,7 @@ import { createHighlighter, type Highlighter, type ThemedToken } from 'shiki';
 let highlighterPromise: Promise<Highlighter> | null = null;
 const themeCache = new Map<string, boolean>();
 const langCache = new Map<string, boolean>();
+const langFailCache = new Set<string>();
 const LANG_MAP: Record<string, string> = {
   'javascript': 'javascript',
   'js': 'javascript',
@@ -36,7 +37,7 @@ const LANG_MAP: Record<string, string> = {
   'ruby': 'ruby',
   'markdown': 'markdown',
   'dockerfile': 'dockerfile',
-  'pseudo': 'python', // Use Python highlighting for pseudocode (closest match)
+  'pseudo': 'python',
   'plaintext': 'plaintext',
 };
 
@@ -72,15 +73,32 @@ export async function highlightCode(
 ): Promise<HighlightResult> {
   const highlighter = await getHighlighter();
 
-  // Load language if not cached
-  const lang = (LANG_MAP[language] || 'javascript') as Parameters<Highlighter['loadLanguage']>[0];
-  if (!langCache.has(lang as string)) {
+  // Resolve language with fallback chain
+  const mappedLang = LANG_MAP[language] || language;
+  let lang = mappedLang as Parameters<Highlighter['loadLanguage']>[0];
+  let langLoaded = langCache.has(lang as string);
+
+  if (!langLoaded && !langFailCache.has(lang as string)) {
     try {
       await highlighter.loadLanguage(lang);
       langCache.set(lang as string, true);
+      langLoaded = true;
     } catch {
-      // fallback
+      langFailCache.add(lang as string);
+      // Fallback to javascript
+      lang = 'javascript' as Parameters<Highlighter['loadLanguage']>[0];
+      if (!langCache.has('javascript')) {
+        try {
+          await highlighter.loadLanguage('javascript');
+          langCache.set('javascript', true);
+        } catch {
+          // Both failed — render without highlighting
+        }
+      }
     }
+  } else if (langFailCache.has(lang as string)) {
+    // Known failed language — use javascript fallback
+    lang = 'javascript' as Parameters<Highlighter['loadLanguage']>[0];
   }
 
   // Load theme if not cached
@@ -90,13 +108,23 @@ export async function highlightCode(
       await highlighter.loadTheme(theme);
       themeCache.set(theme as string, true);
     } catch {
-      // fallback
+      // Theme fallback
+      if (!themeCache.has('dracula')) {
+        try {
+          await highlighter.loadTheme('dracula');
+          themeCache.set('dracula', true);
+        } catch {
+          // ignore
+        }
+      }
     }
   }
 
+  const resolvedTheme = themeCache.has(theme as string) ? theme : 'dracula';
+
   const tokens = await highlighter.codeToTokensBase(code, {
     lang: lang as Parameters<typeof highlighter.codeToTokensBase>[1]['lang'],
-    theme: theme as Parameters<typeof highlighter.codeToTokensBase>[1]['theme'],
+    theme: resolvedTheme as Parameters<typeof highlighter.codeToTokensBase>[1]['theme'],
   });
 
   return {
