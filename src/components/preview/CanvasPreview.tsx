@@ -140,6 +140,7 @@ export function CanvasPreview() {
       background,
       windowChrome: currentScene.windowChrome,
       typography: currentScene.typography,
+      typingConfig: currentScene.typingConfig,
       frameIndex: Math.round((tMs / 1000) * 30),
       fps: 30,
       visibleLines: state.visibleLines,

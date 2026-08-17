@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { UISkin, BrandKit } from '@/core/types';
 import { uiSkins, getUISkinById } from '@/data/uiSkins';
 import { generateId } from '@/lib/utils';
+import { useProjectStore } from './projectStore';
 
 interface UISkinStore {
   skins: UISkin[];
@@ -77,8 +78,19 @@ export const useUISkinStore = create<UISkinStore>((set, get) => ({
     const kit = brandKits.find(bk => bk.id === id);
     if (!kit) return;
 
+    // Apply UI skin
     get().setSkin(kit.uiSkinId);
     set({ currentBrandKitId: id });
+
+    // Apply brand kit theme/background to current scene
+    const projectState = useProjectStore.getState();
+    const project = projectState.projects.find(p => p.id === projectState.currentProjectId);
+    if (project) {
+      projectState.updateScene(project.id, projectState.currentSceneIndex, {
+        codeThemeId: kit.codeThemeId,
+        backgroundPresetId: kit.backgroundPresetId,
+      });
+    }
   },
 
   getCurrentSkin: () => {

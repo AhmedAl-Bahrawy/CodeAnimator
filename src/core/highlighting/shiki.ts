@@ -43,7 +43,11 @@ const LANG_MAP: Record<string, string> = {
 async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      themes: ['dracula', 'monokai', 'night-owl', 'one-dark-pro', 'github-dark', 'nord'],
+      themes: [
+        'dracula', 'monokai', 'night-owl', 'one-dark-pro', 'github-dark', 'nord',
+        'solarized-dark', 'gruvbox-dark-medium', 'catppuccin-mocha', 'ayu-dark',
+        'tokyo-night', 'synthwave-84', 'material-theme-darker', 'poimandres',
+      ],
       langs: ['javascript', 'typescript', 'python', 'html', 'css', 'bash', 'json'],
     });
   }

@@ -227,6 +227,7 @@ export interface RenderContext {
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
+  typingConfig: TypingConfig;
   frameIndex: number;
   fps: number;
 }

@@ -97,6 +97,7 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         background: config.background,
         windowChrome: config.windowChrome,
         typography: config.typography,
+        typingConfig: config.typingConfig,
         frameIndex,
         fps: config.fps,
         visibleLines: state.visibleLines,

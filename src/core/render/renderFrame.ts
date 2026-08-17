@@ -1,4 +1,4 @@
-import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken } from '@/core/types';
+import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, TypingConfig, CodeToken } from '@/core/types';
 import {
   drawBackground,
   drawMargin,
@@ -21,6 +21,7 @@ export interface RenderFrameOptions {
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
+  typingConfig: TypingConfig;
   frameIndex: number;
   fps: number;
   visibleLines: string[];
@@ -28,9 +29,26 @@ export interface RenderFrameOptions {
 }
 
 export function renderFrame(options: RenderFrameOptions): void {
-  const { ctx, width, height, state, theme, background, windowChrome, typography, frameIndex, fps, visibleLines, tokenLines } = options;
+  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, frameIndex, fps, visibleLines, tokenLines } = options;
 
   ctx.clearRect(0, 0, width, height);
+
+  // Apply zoom transform
+  const zoom = state.zoomLevel || 1;
+  if (zoom !== 1) {
+    ctx.save();
+    const cx = width / 2;
+    const cy = height / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cx, -cy);
+  }
+
+  // Auto-scroll: if cursor goes below 70% of visible area, scroll it into view
+  const lineHeight = typography.fontSize * 1.6;
+  if (typingConfig.autoScroll && state.cursorLine * lineHeight > height * 0.7) {
+    state.scrollOffsetPx = -(state.cursorLine * lineHeight - height * 0.7);
+  }
 
   const renderCtx = {
     ctx,
@@ -41,6 +59,7 @@ export function renderFrame(options: RenderFrameOptions): void {
     background,
     windowChrome,
     typography,
+    typingConfig,
     frameIndex,
     fps,
   };
@@ -74,4 +93,9 @@ export function renderFrame(options: RenderFrameOptions): void {
 
   // Layer 10: Watermark
   drawWatermark(renderCtx);
+
+  // Reset transform if zoom was applied
+  if (zoom !== 1) {
+    ctx.restore();
+  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -10,6 +10,8 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { bracketMatching } from '@codemirror/language';
 import { closeBrackets } from '@codemirror/autocomplete';
+import { getThemeById } from '@/data/codeThemes';
+import type { CodeTheme } from '@/core/types';
 
 // Dark theme matching our app
 const codereelTheme = EditorView.theme({
@@ -88,6 +90,39 @@ const codereelHighlightStyle = HighlightStyle.define([
   { tag: tags.invalid, color: '#ffffff', backgroundColor: '#e06c75' },
 ]);
 
+function buildHighlightStyleFromTheme(theme: CodeTheme): HighlightStyle {
+  const a = theme.ansi;
+  return HighlightStyle.define([
+    { tag: tags.keyword, color: a.magenta },
+    { tag: tags.operator, color: a.cyan },
+    { tag: tags.special(tags.variableName), color: a.red },
+    { tag: tags.variableName, color: a.red },
+    { tag: tags.definition(tags.variableName), color: a.blue },
+    { tag: tags.string, color: a.green },
+    { tag: tags.special(tags.string), color: a.cyan },
+    { tag: tags.comment, color: a.brightBlack, fontStyle: 'italic' },
+    { tag: tags.number, color: a.yellow },
+    { tag: tags.typeName, color: a.yellow },
+    { tag: tags.className, color: a.yellow },
+    { tag: tags.propertyName, color: a.blue },
+    { tag: tags.function(tags.variableName), color: a.blue },
+    { tag: tags.function(tags.propertyName), color: a.blue },
+    { tag: tags.tagName, color: a.red },
+    { tag: tags.attributeName, color: a.yellow },
+    { tag: tags.labelName, color: a.blue },
+    { tag: tags.namespace, color: a.red },
+    { tag: tags.macroName, color: a.red },
+    { tag: tags.atom, color: a.cyan },
+    { tag: tags.literal, color: a.cyan },
+    { tag: tags.separator, color: a.white },
+    { tag: tags.regexp, color: a.green },
+    { tag: tags.escape, color: a.cyan },
+    { tag: tags.meta, color: a.white },
+    { tag: tags.url, color: a.cyan, textDecoration: 'underline' },
+    { tag: tags.invalid, color: '#ffffff', backgroundColor: a.red },
+  ]);
+}
+
 const languageMap: Record<string, () => ReturnType<typeof javascript>> = {
   javascript: () => javascript(),
   js: () => javascript(),
@@ -126,16 +161,23 @@ interface CodeInputProps {
   value: string;
   onChange: (value: string) => void;
   language?: string;
+  codeThemeId?: string;
   className?: string;
 }
 
-export function CodeInput({ value, onChange, language = 'javascript', className }: CodeInputProps) {
+export function CodeInput({ value, onChange, language = 'javascript', codeThemeId, className }: CodeInputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
   });
+
+  const codeTheme = codeThemeId ? getThemeById(codeThemeId) : null;
+  const highlightStyle = useMemo(() => {
+    if (!codeTheme) return codereelHighlightStyle;
+    return buildHighlightStyleFromTheme(codeTheme);
+  }, [codeTheme]);
 
   const getLanguage = useCallback(() => {
     const factory = languageMap[language] || languageMap.javascript;
@@ -154,7 +196,7 @@ export function CodeInput({ value, onChange, language = 'javascript', className 
         history(),
         bracketMatching(),
         closeBrackets(),
-        syntaxHighlighting(codereelHighlightStyle),
+        syntaxHighlighting(highlightStyle),
         codereelTheme,
         getLanguage(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -177,7 +219,7 @@ export function CodeInput({ value, onChange, language = 'javascript', className 
       view.destroy();
       viewRef.current = null;
     };
-  }, [language]); // Re-create on language change only; value sync is handled by separate effect
+  }, [language, highlightStyle]); // Re-create on language or theme change; value sync is handled by separate effect
 
   // Sync external value changes
   useEffect(() => {

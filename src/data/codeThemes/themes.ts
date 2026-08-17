@@ -303,6 +303,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#f8f8f2',
     lineNumberColor: '#90908a',
     selectionColor: '#49483eaa',
+    shikiTheme: 'material-theme-darker',
   },
   {
     id: 'cobalt2',
@@ -342,6 +343,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ffffff',
     lineNumberColor: '#555555',
     selectionColor: '#1a3a5a99',
+    shikiTheme: 'slack-dark',
   },
   {
     id: 'ayu-dark',
@@ -414,6 +416,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#33ff33',
     lineNumberColor: '#1a661a',
     selectionColor: '#33ff3333',
+    shikiTheme: 'poimandres',
   },
   {
     id: 'amber-phosphor',
@@ -453,6 +456,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ffb000',
     lineNumberColor: '#664400',
     selectionColor: '#ffb00033',
+    shikiTheme: 'laserwave',
   },
   {
     id: 'msdos-blue',
@@ -492,6 +496,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ffffff',
     lineNumberColor: '#5555ff',
     selectionColor: '#ffffff33',
+    shikiTheme: 'material-theme-ocean',
   },
   {
     id: 'hacker-red',
@@ -531,6 +536,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ff0000',
     lineNumberColor: '#440000',
     selectionColor: '#ff000033',
+    shikiTheme: 'red',
   },
   {
     id: 'matrix-green',
@@ -570,6 +576,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#00ff41',
     lineNumberColor: '#003300',
     selectionColor: '#00ff4133',
+    shikiTheme: 'poimandres',
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -613,6 +620,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ff7edb',
     lineNumberColor: '#504966',
     selectionColor: '#a074c433',
+    shikiTheme: 'synthwave-84',
   },
   {
     id: 'cyberpunk-neon',
@@ -652,6 +660,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ff0055',
     lineNumberColor: '#330055',
     selectionColor: '#ff005533',
+    shikiTheme: 'plastic',
   },
   {
     id: 'pastel-dreams',
@@ -691,6 +700,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#a0c4ff',
     lineNumberColor: '#555577',
     selectionColor: '#c4b7d533',
+    shikiTheme: 'rose-pine',
   },
   {
     id: 'sunset-gradient',
@@ -730,6 +740,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#ffd700',
     lineNumberColor: '#4a3560',
     selectionColor: '#ff79c633',
+    shikiTheme: 'kanagawa-wave',
   },
   {
     id: 'neon-glow',
@@ -769,6 +780,7 @@ export const codeThemes: CodeTheme[] = [
     cursorColor: '#00ff80',
     lineNumberColor: '#2a0845',
     selectionColor: '#ff008033',
+    shikiTheme: 'aurora-x',
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -788,6 +800,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#c5c8c6',
     lineNumberColor: '#969896',
+    shikiTheme: 'dark-plus',
   },
   {
     id: 'palenight',
@@ -803,6 +816,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#ff0000',
     lineNumberColor: '#4a4f6d',
+    shikiTheme: 'material-theme-palenight',
   },
   {
     id: 'atom-dark',
@@ -818,6 +832,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#f8f8f0',
     lineNumberColor: '#50535b',
+    shikiTheme: 'tokyo-night',
   },
   {
     id: 'oceanic-next',
@@ -833,6 +848,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#c0c5ce',
     lineNumberColor: '#65737e',
+    shikiTheme: 'material-theme-ocean',
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -852,6 +868,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#f1f1f0',
     lineNumberColor: '#555555',
+    shikiTheme: 'vitesse-dark',
   },
   {
     id: 'indigo-night',
@@ -867,6 +884,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#82aaff',
     lineNumberColor: '#4a4f6d',
+    shikiTheme: 'night-owl',
   },
   {
     id: 'bubblegum',
@@ -882,6 +900,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#ff9daa',
     lineNumberColor: '#555577',
+    shikiTheme: 'houston',
   },
   {
     id: 'horizon',
@@ -897,6 +916,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#e95678',
     lineNumberColor: '#6c6f93',
+    shikiTheme: 'horizon',
   },
 
   // ═══════════════════════════════════════════════════════════════════
@@ -916,6 +936,7 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#7869c4',
     lineNumberColor: '#524966',
+    shikiTheme: 'plastic',
   },
   {
     id: 'macos-terminal',
@@ -931,5 +952,6 @@ export const codeThemes: CodeTheme[] = [
     },
     cursorColor: '#ffffff',
     lineNumberColor: '#868e96',
+    shikiTheme: 'github-dark-default',
   },
 ];

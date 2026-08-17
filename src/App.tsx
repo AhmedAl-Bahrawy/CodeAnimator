@@ -10,7 +10,7 @@ import { TypingBehaviorControls } from './components/style/TypingBehaviorControl
 import { TypographyControls } from './components/style/TypographyControls';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
-import { useProjectStore, useTimelineStore } from './stores';
+import { useProjectStore, useTimelineStore, useUISkinStore } from './stores';
 import { buildTimelineFromSource } from './core/timeline';
 import { parseMarkup } from './core/markup/parser';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -21,6 +21,9 @@ import { PresetLibraryDrawer } from './components/editor/PresetLibraryDrawer';
 import { MarkupLintPanel } from './components/editor/MarkupLintPanel';
 import { ProjectManager } from './components/projects/ProjectManager';
 import { startAutosaveSubscription } from './persistence/autosave';
+import { loadAllProjects } from './persistence/projectRepo';
+import { getUISkinById } from './data/uiSkins';
+import { applySkinToDocument } from './stores/uiSkinStore';
 
 function App() {
   const projects = useProjectStore(s => s.projects);
@@ -29,6 +32,7 @@ function App() {
   const createProject = useProjectStore(s => s.createProject);
   const updateScene = useProjectStore(s => s.updateScene);
   const setTimeline = useTimelineStore(s => s.setTimeline);
+  const setSkin = useUISkinStore(s => s.setSkin);
 
   const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'preview'>('editor');
   const [showPresets, setShowPresets] = useState(false);
@@ -38,17 +42,52 @@ function App() {
   const currentProject = projects.find(p => p.id === currentProjectId) || null;
   const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
 
-  // Auto-create a project if none exists
+  // Hydrate from IndexedDB on mount
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!currentProjectId || !currentProject) {
-      createProject('My First Project');
-    }
-  }, [currentProjectId, currentProject, createProject]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const saved = await loadAllProjects();
+        if (cancelled) return;
+        if (saved.length > 0) {
+          // Hydrate store with saved projects
+          useProjectStore.setState({
+            projects: saved,
+            currentProjectId: saved[0].id,
+            currentSceneIndex: 0,
+          });
+          // Restore UI skin from localStorage
+          const savedSkinId = localStorage.getItem('codereel-skin-id');
+          if (savedSkinId) {
+            const skin = getUISkinById(savedSkinId);
+            if (skin) {
+              applySkinToDocument(skin);
+              setSkin(savedSkinId);
+            }
+          }
+        } else {
+          createProject('My First Project');
+        }
+      } catch {
+        createProject('My First Project');
+      }
+      setHydrated(true);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist UI skin selection
+  const currentSkinId = useUISkinStore(s => s.currentSkinId);
+  useEffect(() => {
+    if (hydrated) localStorage.setItem('codereel-skin-id', currentSkinId);
+  }, [currentSkinId, hydrated]);
 
   // Wire autosave subscription (HIGH-01)
   useEffect(() => {
-    startAutosaveSubscription(() => useProjectStore.getState().getCurrentProject());
-  }, []);
+    if (hydrated) startAutosaveSubscription(() => useProjectStore.getState().getCurrentProject());
+  }, [hydrated]);
 
   // Build timeline when source changes (strip markup first)
   useEffect(() => {
@@ -111,7 +150,7 @@ function App() {
     useProjectStore.getState().updateProject(currentProject.id, { aspectRatio: value as '9:16' | '1:1' | '16:9' | 'custom' });
   }, [currentProject]);
 
-  if (!currentScene) {
+  if (!hydrated || !currentScene) {
     return (
       <AppShell>
         <div className="flex items-center justify-center h-full text-[var(--text-muted)]">
@@ -148,6 +187,7 @@ function App() {
               value={currentScene.sourceWithMarkup}
               onChange={handleCodeChange}
               language={currentScene.language}
+              codeThemeId={currentScene.codeThemeId}
             />
           </div>
           <MarkupLintPanel source={currentScene.sourceWithMarkup} />
