@@ -12,7 +12,7 @@ export function getStateAtTime(
 
   const state: CanvasState = {
     visibleText: '',
-    visibleLines: sourceLines,
+    visibleLines: [],
     tokens: [],
     cursorLine: 0,
     cursorCol: 0,
@@ -23,7 +23,13 @@ export function getStateAtTime(
     typingSpeed: _typingConfig.baseSpeed,
   };
 
+  // Find how many events to replay up to tMs
   const eventCount = binarySearchTime(events, tMs);
+
+  // Nothing has happened yet — show empty state
+  if (eventCount === 0) {
+    return state;
+  }
 
   // Build visible text by replaying events
   const lineBuffers: string[][] = sourceLines.map(() => []);
@@ -37,9 +43,15 @@ export function getStateAtTime(
       case 'type-char': {
         const p = event.payload as { line: number; col: number; char: string };
         currentLine = p.line;
-        currentCol = p.col + 1;
-        if (lineBuffers[p.line]) {
-          lineBuffers[p.line][p.col] = p.char;
+        if (p.char === '\n') {
+          // Newline: advance to next line
+          currentLine = p.line + 1;
+          currentCol = 0;
+        } else {
+          currentCol = p.col + 1;
+          if (lineBuffers[p.line]) {
+            lineBuffers[p.line][p.col] = p.char;
+          }
         }
         break;
       }
@@ -50,7 +62,6 @@ export function getStateAtTime(
         const col = existing.length;
         currentCol = col + p.text.length;
         if (lineBuffers[p.line]) {
-          // Append word text to the line buffer
           for (let ci = 0; ci < p.text.length; ci++) {
             lineBuffers[p.line][col + ci] = p.text[ci];
           }
@@ -116,42 +127,26 @@ export function getStateAtTime(
       case 'pause':
       case 'cut':
       case 'scene-transition':
-        // Pause: just skip time (already accounted for in timeline)
-        // Cut/scene: already applied by timeline builder
+        // Pause: time already shifted in builder. Cut/scene: handled by timeline
         break;
       default:
         break;
     }
   }
 
-  // Build visibleLines from the line buffers
+  // Build visibleLines from line buffers
   const visibleLines: string[] = [];
   for (let i = 0; i < sourceLines.length; i++) {
     const buf = lineBuffers[i];
     if (buf && buf.some(c => c !== undefined)) {
-      // At least some chars typed on this line
       visibleLines.push(buf.join(''));
     } else if (i < currentLine) {
-      // Lines before current are fully typed (show original)
+      // Lines before current are fully typed
       visibleLines.push(sourceLines[i]);
     } else if (i === currentLine) {
-      // Current line partially typed
       visibleLines.push(buf ? buf.join('') : '');
     }
     // Lines after current are not yet typed — skip them
-  }
-
-  // If nothing typed yet, show all source lines (for initial preview)
-  const hasTyped = events.some(
-    (e, idx) => idx < eventCount && (e.type === 'type-char' || e.type === 'type-word' || e.type === 'type-line')
-  );
-
-  if (!hasTyped) {
-    state.visibleLines = sourceLines;
-    state.visibleText = source;
-    state.cursorLine = 0;
-    state.cursorCol = 0;
-    return state;
   }
 
   state.visibleLines = visibleLines;

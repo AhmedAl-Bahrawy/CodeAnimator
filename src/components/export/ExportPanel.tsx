@@ -1,16 +1,27 @@
-import { useState } from 'react';
-import { useExportStore, useProjectStore, useThemeStore } from '@/stores';
+import { useState, useMemo } from 'react';
+import { useExportStore, useProjectStore } from '@/stores';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { platformPresets } from '@/data/platformPresets';
-import { getAvailableExporters, selectExporter } from '@/core/export';
+import { selectExporter } from '@/core/export';
 import { buildTimelineFromSource } from '@/core/timeline';
 import { parseMarkup } from '@/core/markup/parser';
 import { getBackgroundById } from '@/data/backgroundPresets';
+import { getThemeById } from '@/data/codeThemes';
 import type { ExportFormat } from '@/core/types';
+
+function resolveExportDimensions(aspectRatio: string, customWidth?: number, customHeight?: number): { w: number; h: number } {
+  if (aspectRatio === 'custom' && customWidth && customHeight) return { w: customWidth, h: customHeight };
+  const map: Record<string, { w: number; h: number }> = {
+    '9:16': { w: 1080, h: 1920 },
+    '1:1': { w: 1080, h: 1080 },
+    '16:9': { w: 1920, h: 1080 },
+  };
+  return map[aspectRatio] || { w: 1080, h: 1920 };
+}
 
 export function ExportPanel() {
   const {
@@ -25,17 +36,32 @@ export function ExportPanel() {
   const [selectedPreset, setSelectedPreset] = useState('youtube-shorts');
   const [exportStatus, setExportStatus] = useState('');
 
-  const currentScene = useProjectStore(s => {
-    const project = s.projects.find(p => p.id === s.currentProjectId);
-    return project ? project.scenes[s.currentSceneIndex] : null;
+  const currentProject = useProjectStore(s => {
+    return s.projects.find(p => p.id === s.currentProjectId) || null;
   });
+  const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
+  const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
 
-  const currentTheme = useThemeStore(s => s.themes.find(t => t.id === s.currentThemeId) || s.themes[0]);
+  // Resolve theme from scene codeThemeId (BLK-06)
+  const sceneTheme = useMemo(() => {
+    if (!currentScene) return null;
+    return getThemeById(currentScene.codeThemeId) || null;
+  }, [currentScene?.codeThemeId]);
+
+  // Resolve dimensions from project aspect ratio (CRI-08)
+  const projectDimensions = useMemo(() => {
+    if (!currentProject) return { w: 1080, h: 1920 };
+    return resolveExportDimensions(currentProject.aspectRatio, currentProject.customWidth, currentProject.customHeight);
+  }, [currentProject?.aspectRatio, currentProject?.customWidth, currentProject?.customHeight]);
+
+  // Override dimensions from platform preset if one is explicitly selected
+  const selectedPresetData = platformPresets.find(p => p.id === selectedPreset);
+  const exportWidth = selectedPresetData?.width || projectDimensions.w;
+  const exportHeight = selectedPresetData?.height || projectDimensions.h;
 
   const handleExport = async () => {
-    if (!currentScene) return;
+    if (!currentScene || !sceneTheme) return;
 
-    // Strip markup from source before building timeline
     const { cleanSource, events: markupEvents } = parseMarkup(currentScene.sourceWithMarkup);
 
     const timeline = buildTimelineFromSource({
@@ -45,29 +71,31 @@ export function ExportPanel() {
       markupEvents,
     });
 
-    const preset = platformPresets.find(p => p.id === selectedPreset);
-    const width = preset?.width || 1080;
-    const height = preset?.height || 1920;
-
     startExport();
     setExportStatus('Preparing export...');
 
     try {
       const exporter = selectExporter(format);
+      if (!exporter.isSupported) {
+        setExportStatus(`Export format ${format.toUpperCase()} is not supported in this browser.`);
+        cancelExport();
+        return;
+      }
       setExportStatus(`Exporting via ${exporter.tierName}...`);
 
       const background = getBackgroundById(currentScene.backgroundPresetId);
 
-      const blob = await exporter.export(
+        const blob = await exporter.export(
         {
           timeline,
           source: cleanSource,
           typingConfig: currentScene.typingConfig,
-          theme: currentTheme,
+          theme: sceneTheme,
           background,
           windowChrome: currentScene.windowChrome,
-          width,
-          height,
+          typography: currentScene.typography,
+          width: exportWidth,
+          height: exportHeight,
           fps,
           format,
           playbackSpeedMultiplier,
@@ -79,7 +107,9 @@ export function ExportPanel() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `codereel-export.${format === 'gif' ? 'webm' : format}`;
+      // BLK-02: Use correct file extension based on actual blob MIME type
+      const ext = format === 'gif' ? 'gif' : blob.type.includes('webm') ? 'webm' : format;
+      a.download = `codereel-export.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -89,7 +119,8 @@ export function ExportPanel() {
       setTimeout(() => finishExport(), 1000);
     } catch (err) {
       console.error('Export failed:', err);
-      setExportStatus('Export failed. Try a different format.');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setExportStatus(`Export failed: ${msg}`);
       cancelExport();
     }
   };
@@ -115,6 +146,10 @@ export function ExportPanel() {
             ))}
           </SelectContent>
         </Select>
+        <div className="text-[10px] text-[var(--text-muted)]">
+          Output: {exportWidth}x{exportHeight}px
+          {currentProject?.aspectRatio !== 'custom' && ` (${currentProject?.aspectRatio || '9:16'})`}
+        </div>
       </div>
 
       <Separator />

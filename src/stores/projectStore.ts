@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Project, Scene, AspectRatio, TypingConfig, WindowChromeConfig } from '@/core/types';
+import type { Project, Scene, TypingConfig, WindowChromeConfig, TypographySettings } from '@/core/types';
 import { generateId } from '@/lib/utils';
 
 interface ProjectStore {
@@ -43,6 +43,13 @@ const defaultWindowChrome: WindowChromeConfig = {
   marginFill: 'transparent',
 };
 
+const defaultTypography: TypographySettings = {
+  fontSize: 15,
+  fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", monospace',
+  lineHeight: 1.6,
+  letterSpacing: 0,
+};
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [],
   currentProjectId: null,
@@ -62,6 +69,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         backgroundPresetId: 'default',
         windowChrome: { ...defaultWindowChrome },
         typingConfig: { ...defaultTypingConfig },
+        typography: { ...defaultTypography },
       }],
       aspectRatio: '9:16',
     };
@@ -126,6 +134,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           backgroundPresetId: p.scenes[0]?.backgroundPresetId || 'default',
           windowChrome: { ...defaultWindowChrome },
           typingConfig: { ...defaultTypingConfig },
+          typography: { ...defaultTypography },
         }],
       };
     }),

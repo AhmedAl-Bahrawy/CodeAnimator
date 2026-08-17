@@ -1,4 +1,4 @@
-import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, CodeToken } from '@/core/types';
+import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken } from '@/core/types';
 import {
   drawBackground,
   drawMargin,
@@ -20,6 +20,7 @@ export interface RenderFrameOptions {
   theme: CodeTheme;
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
+  typography: TypographySettings;
   frameIndex: number;
   fps: number;
   visibleLines: string[];
@@ -27,7 +28,7 @@ export interface RenderFrameOptions {
 }
 
 export function renderFrame(options: RenderFrameOptions): void {
-  const { ctx, width, height, state, theme, background, windowChrome, frameIndex, fps, visibleLines, tokenLines } = options;
+  const { ctx, width, height, state, theme, background, windowChrome, typography, frameIndex, fps, visibleLines, tokenLines } = options;
 
   ctx.clearRect(0, 0, width, height);
 
@@ -39,6 +40,7 @@ export function renderFrame(options: RenderFrameOptions): void {
     theme,
     background,
     windowChrome,
+    typography,
     frameIndex,
     fps,
   };
@@ -65,7 +67,7 @@ export function renderFrame(options: RenderFrameOptions): void {
   drawHighlightOverlay(renderCtx, visibleLines);
 
   // Layer 8: Cursor
-  drawCursor(renderCtx, visibleLines);
+  drawCursor(renderCtx);
 
   // Layer 9: FX
   drawFX(renderCtx);

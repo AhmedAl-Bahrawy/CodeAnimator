@@ -47,10 +47,8 @@ export function parseMarkup(source: string): {
     const line = lines[lineIdx];
     const regex = /\[\[([a-zA-Z]+(?::[^\]]+)?)\]\]/g;
     let match;
-    let hasMarkup = false;
 
     while ((match = regex.exec(line)) !== null) {
-      hasMarkup = true;
       const raw = match[0];
       const content = match[1];
       const colonIdx = content.indexOf(':');

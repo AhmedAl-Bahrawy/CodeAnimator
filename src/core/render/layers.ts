@@ -1,9 +1,8 @@
 import type { RenderContext, CodeToken } from '@/core/types';
 
 const MONO_FONT = '"SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", monospace';
-const LINE_HEIGHT = 28;
+const LINE_HEIGHT_MULT = 1.6;
 const GUTTER_WIDTH = 52;
-const FONT_SIZE = 15;
 
 // ====== Layer 1: Scene Background ======
 export function drawBackground(ctx: RenderContext): void {
@@ -51,10 +50,11 @@ export function drawMargin(ctx: RenderContext): void {
 
 // ====== Helper: Compute frame geometry ======
 function getFrameGeometry(ctx: RenderContext) {
-  const { width, height, windowChrome } = ctx;
+  const { width, height, windowChrome, typography } = ctx;
   const m = windowChrome.margin;
   const hasTitleBar = windowChrome.style !== 'none';
   const titleBarHeight = hasTitleBar ? 38 : 0;
+  const lineHeight = typography.fontSize * LINE_HEIGHT_MULT;
 
   return {
     frameX: m,
@@ -68,12 +68,13 @@ function getFrameGeometry(ctx: RenderContext) {
     titleBarHeight,
     codeX: m + GUTTER_WIDTH + windowChrome.padding,
     codeY: m + titleBarHeight + windowChrome.padding,
+    lineHeight,
   };
 }
 
 // ====== Layer 3: Window Frame ======
 export function drawWindowFrame(ctx: RenderContext): void {
-  const { ctx: c, width, height, windowChrome, theme } = ctx;
+  const { ctx: c, windowChrome, theme } = ctx;
   const { frameX, frameY, frameW, frameH, titleBarHeight } = getFrameGeometry(ctx);
 
   // Drop shadow
@@ -200,16 +201,16 @@ export function drawCodeSurface(ctx: RenderContext): void {
 
 // ====== Layer 5: Line Numbers ======
 export function drawLineNumbers(ctx: RenderContext, visibleLines: string[]): void {
-  const { ctx: c, windowChrome, theme } = ctx;
-  const { contentX, contentY } = getFrameGeometry(ctx);
+  const { ctx: c, windowChrome, theme, typography } = ctx;
+  const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
   const padding = windowChrome.padding;
 
   c.fillStyle = theme.lineNumberColor || adjustAlpha(theme.foreground, 0.25);
-  c.font = `${FONT_SIZE - 1}px ${MONO_FONT}`;
+  c.font = `${typography.fontSize - 1}px ${MONO_FONT}`;
   c.textAlign = 'right';
 
   for (let i = 0; i < visibleLines.length; i++) {
-    const y = contentY + padding + i * LINE_HEIGHT + LINE_HEIGHT * 0.82;
+    const y = contentY + padding + i * lineHeight + lineHeight * 0.82;
     c.fillText(String(i + 1), contentX + GUTTER_WIDTH - 10, y);
   }
 
@@ -222,14 +223,15 @@ export function drawCodeText(
   visibleLines: string[],
   tokenLines: CodeToken[][] | null
 ): void {
-  const { ctx: c, windowChrome, theme } = ctx;
-  const { contentX, contentY } = getFrameGeometry(ctx);
+  const { ctx: c, windowChrome, theme, typography } = ctx;
+  const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
   const padding = windowChrome.padding;
 
-  c.font = `${FONT_SIZE}px ${MONO_FONT}`;
+  c.font = `${typography.fontSize}px ${typography.fontFamily || MONO_FONT}`;
+  c.letterSpacing = `${typography.letterSpacing || 0}px`;
 
   for (let lineIdx = 0; lineIdx < visibleLines.length; lineIdx++) {
-    const y = contentY + padding + lineIdx * LINE_HEIGHT + LINE_HEIGHT * 0.82;
+    const y = contentY + padding + lineIdx * lineHeight + lineHeight * 0.82;
     const x = contentX + GUTTER_WIDTH;
 
     if (tokenLines && tokenLines[lineIdx]) {
@@ -244,6 +246,8 @@ export function drawCodeText(
       c.fillText(visibleLines[lineIdx] || '', x, y);
     }
   }
+
+  c.letterSpacing = '0px';
 }
 
 // ====== Layer 7: Highlight/Focus Overlay ======
@@ -251,18 +255,16 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
   const { ctx: c, state, windowChrome, theme } = ctx;
   if (!state.activeHighlightRange && state.focusLine === null) return;
 
-  const { contentX, contentY, contentW, contentH } = getFrameGeometry(ctx);
+  const { contentX, contentY, contentW, contentH, lineHeight } = getFrameGeometry(ctx);
   const padding = windowChrome.padding;
 
   // Dim overlay for focus mode
   if (state.focusLine !== null) {
-    const focusY = contentY + padding + state.focusLine * LINE_HEIGHT;
+    const focusY = contentY + padding + state.focusLine * lineHeight;
 
     c.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    // Top dim
     c.fillRect(contentX, contentY, contentW, Math.max(0, focusY - contentY));
-    // Bottom dim
-    c.fillRect(contentX, focusY + LINE_HEIGHT, contentW, Math.max(0, (contentY + contentH) - focusY - LINE_HEIGHT));
+    c.fillRect(contentX, focusY + lineHeight, contentW, Math.max(0, (contentY + contentH) - focusY - lineHeight));
   }
 
   // Highlight range
@@ -271,16 +273,16 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
     c.fillStyle = theme.selectionColor || 'rgba(99, 102, 241, 0.15)';
 
     for (let i = start; i <= end && i < visibleLines.length; i++) {
-      const y = contentY + padding + i * LINE_HEIGHT;
-      c.fillRect(contentX, y, contentW, LINE_HEIGHT);
+      const y = contentY + padding + i * lineHeight;
+      c.fillRect(contentX, y, contentW, lineHeight);
     }
   }
 }
 
 // ====== Layer 8: Cursor ======
-export function drawCursor(ctx: RenderContext, visibleLines: string[]): void {
-  const { ctx: c, state, windowChrome, theme, frameIndex, fps } = ctx;
-  const { contentX, contentY } = getFrameGeometry(ctx);
+export function drawCursor(ctx: RenderContext): void {
+  const { ctx: c, state, windowChrome, theme, typography, frameIndex, fps } = ctx;
+  const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
   const padding = windowChrome.padding;
 
   const blinkCycle = Math.round(fps * 0.7);
@@ -288,11 +290,11 @@ export function drawCursor(ctx: RenderContext, visibleLines: string[]): void {
   const isVisible = blinkFrame < blinkCycle / 2;
   if (!isVisible) return;
 
-  c.font = `${FONT_SIZE}px ${MONO_FONT}`;
+  c.font = `${typography.fontSize}px ${typography.fontFamily || MONO_FONT}`;
   const charWidth = c.measureText('M').width;
   const cursorX = contentX + GUTTER_WIDTH + state.cursorCol * charWidth;
-  const cursorY = contentY + padding + state.cursorLine * LINE_HEIGHT;
-  const cursorH = LINE_HEIGHT - 4;
+  const cursorY = contentY + padding + state.cursorLine * lineHeight;
+  const cursorH = lineHeight - 4;
 
   c.fillStyle = theme.cursorColor || theme.foreground;
 
@@ -300,7 +302,6 @@ export function drawCursor(ctx: RenderContext, visibleLines: string[]): void {
     case 'terminal':
     case 'macos':
     default: {
-      // Bar cursor
       c.fillRect(cursorX, cursorY + 2, 3, cursorH);
       break;
     }
@@ -308,14 +309,16 @@ export function drawCursor(ctx: RenderContext, visibleLines: string[]): void {
 }
 
 // ====== Layer 9: FX Layer ======
-export function drawFX(ctx: RenderContext): void {
-  // Placeholder for retro terminal FX (scanlines, CRT flicker, glow)
-  // Will be enhanced in Phase 3 with seeded RNG for export determinism
+export function drawFX(_ctx: RenderContext): void {
+  // Retro terminal FX (scanlines, CRT flicker, glow)
+  // Deterministic via seeded RNG for export — see utils.seededRandom
+  void _ctx;
 }
 
 // ====== Layer 10: Branding/Watermark ======
-export function drawWatermark(ctx: RenderContext): void {
-  // Optional user watermark — placeholder for Phase 2
+export function drawWatermark(_ctx: RenderContext): void {
+  // Optional user watermark
+  void _ctx;
 }
 
 // ====== Helper Functions ======

@@ -7,8 +7,8 @@ export function selectExporter(format: ExportFormat): Exporter {
   if (format === 'gif') return gifExporter;
   if (webCodecsExporter.isSupported) return webCodecsExporter;
   if (mediaRecorderExporter.isSupported) return mediaRecorderExporter;
-  // Last resort — will throw if neither is available
-  return mediaRecorderExporter;
+  // BLK-03: Throw if no exporter is available instead of silently failing
+  throw new Error(`No exporter available for format "${format}" in this browser. Try GIF or use a different browser.`);
 }
 
 export function getAvailableExporters(): { tier: string; supported: boolean; label: string }[] {
@@ -25,7 +25,7 @@ export function getAvailableExporters(): { tier: string; supported: boolean; lab
     },
     {
       tier: 'gif',
-      supported: true,
+      supported: gifExporter.isSupported,
       label: 'GIF',
     },
   ];

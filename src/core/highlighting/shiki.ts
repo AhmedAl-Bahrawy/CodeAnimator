@@ -3,22 +3,6 @@ import { createHighlighter, type Highlighter, type ThemedToken } from 'shiki';
 let highlighterPromise: Promise<Highlighter> | null = null;
 const themeCache = new Map<string, boolean>();
 const langCache = new Map<string, boolean>();
-
-// Map our theme IDs to Shiki theme names
-const THEME_MAP: Record<string, string> = {
-  'dracula': 'dracula',
-  'monokai': 'monokai',
-  'night-owl': 'night-owl',
-  'one-dark-pro': 'one-dark-pro',
-  'solarized-dark': 'solarized-dark',
-  'gruvbox-dark': 'gruvbox-dark-medium',
-  'nord': 'nord',
-  'github-dark': 'github-dark',
-  'catppuccin-mocha': 'catppuccin-mocha',
-  'ayu-dark': 'ayu-dark',
-};
-
-// Map language IDs to Shiki language names
 const LANG_MAP: Record<string, string> = {
   'javascript': 'javascript',
   'js': 'javascript',
@@ -85,34 +69,34 @@ export async function highlightCode(
   const highlighter = await getHighlighter();
 
   // Load language if not cached
-  const lang = LANG_MAP[language] || 'javascript';
-  if (!langCache.has(lang)) {
+  const lang = (LANG_MAP[language] || 'javascript') as Parameters<Highlighter['loadLanguage']>[0];
+  if (!langCache.has(lang as string)) {
     try {
       await highlighter.loadLanguage(lang);
-      langCache.set(lang, true);
+      langCache.set(lang as string, true);
     } catch {
       // fallback
     }
   }
 
   // Load theme if not cached
-  const theme = shikiThemeName || 'dracula';
-  if (!themeCache.has(theme)) {
+  const theme = (shikiThemeName || 'dracula') as Parameters<Highlighter['loadTheme']>[0];
+  if (!themeCache.has(theme as string)) {
     try {
       await highlighter.loadTheme(theme);
-      themeCache.set(theme, true);
+      themeCache.set(theme as string, true);
     } catch {
       // fallback
     }
   }
 
-  const tokens = highlighter.codeToTokens(code, {
-    lang,
-    theme,
+  const tokens = await highlighter.codeToTokensBase(code, {
+    lang: lang as Parameters<typeof highlighter.codeToTokensBase>[1]['lang'],
+    theme: theme as Parameters<typeof highlighter.codeToTokensBase>[1]['theme'],
   });
 
   return {
-    lines: tokens.tokens.map((lineTokens: ThemedToken[], lineIdx: number) => {
+    lines: tokens.map((lineTokens: ThemedToken[], lineIdx: number) => {
       let offset = 0;
       // Calculate offset for this line
       const lines = code.split('\n');

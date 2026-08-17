@@ -82,7 +82,7 @@ export const useUISkinStore = create<UISkinStore>((set, get) => ({
   },
 
   getCurrentSkin: () => {
-    const { skins, currentSkinId } = get();
+    const { currentSkinId } = get();
     return getUISkinById(currentSkinId);
   },
 }));

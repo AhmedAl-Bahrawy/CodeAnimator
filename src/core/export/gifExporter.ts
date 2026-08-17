@@ -7,7 +7,7 @@ export const gifExporter: Exporter = {
   isSupported: typeof window !== 'undefined',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, typingConfig, theme, background, windowChrome, width, height, fps } = opts;
+    const { timeline, source, typingConfig, theme, background, windowChrome, typography, width, height, fps } = opts;
 
     // GIF at reduced fps for reasonable file size
     const gifFps = Math.min(fps, 15);
@@ -73,6 +73,7 @@ export const gifExporter: Exporter = {
           theme,
           background,
           windowChrome,
+          typography,
           frameIndex: currentFrame,
           fps: gifFps,
           visibleLines: state.visibleLines,

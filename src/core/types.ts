@@ -68,6 +68,14 @@ export interface TypingConfig {
   autoScroll: boolean;
 }
 
+// ====== Typography Settings ======
+export interface TypographySettings {
+  fontSize: number;
+  fontFamily: string;
+  lineHeight: number;
+  letterSpacing: number;
+}
+
 // ====== Aspect Ratio ======
 export type AspectRatio = '9:16' | '1:1' | '16:9' | 'custom';
 
@@ -101,6 +109,7 @@ export interface Scene {
   backgroundPresetId: string;
   windowChrome: WindowChromeConfig;
   typingConfig: TypingConfig;
+  typography: TypographySettings;
 }
 
 // ====== Project ======
@@ -183,6 +192,7 @@ export interface ExportOptions {
   theme: CodeTheme;
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
+  typography: TypographySettings;
   width: number;
   height: number;
   fps: 30 | 60;
@@ -215,6 +225,7 @@ export interface RenderContext {
   theme: CodeTheme;
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
+  typography: TypographySettings;
   frameIndex: number;
   fps: number;
 }

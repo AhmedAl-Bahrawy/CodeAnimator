@@ -11,7 +11,7 @@ interface ProjectManagerProps {
 
 export function ProjectManager({ open, onClose }: ProjectManagerProps) {
   const { projects, currentProjectId, createProject, setCurrentProject, deleteProject } = useProjectStore();
-  const [savedProjects, setSavedProjects] = useState<{ id: string; name: string; updatedAt: number }[]>([]);
+  const [, setSavedProjects] = useState<{ id: string; name: string; updatedAt: number }[]>([]);
   const [newName, setNewName] = useState('');
 
   useEffect(() => {

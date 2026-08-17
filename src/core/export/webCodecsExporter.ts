@@ -7,7 +7,7 @@ export const webCodecsExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'VideoEncoder' in window,
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, typingConfig, theme, background, windowChrome, width, height, fps, format } = opts;
+    const { timeline, source, typingConfig, theme, background, windowChrome, typography, width, height, fps, format } = opts;
 
     if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
       throw new Error('WebCodecs not supported');
@@ -24,11 +24,11 @@ export const webCodecsExporter: Exporter = {
     const chunks: ArrayBuffer[] = [];
 
     const encoder = new VideoEncoder({
-      output: (chunk: VideoEncoderChunk) => {
+      output: (chunk: EncodedVideoChunk) => {
         const buffer = new ArrayBuffer(chunk.byteLength);
         chunk.copyTo(buffer);
         chunks.push(buffer);
-        chunk.close();
+        // EncodedVideoChunk doesn't require explicit close in modern browsers
       },
       error: (e: DOMException) => {
         console.error('VideoEncoder error:', e);
@@ -64,6 +64,7 @@ export const webCodecsExporter: Exporter = {
         theme,
         background,
         windowChrome,
+        typography,
         frameIndex: i,
         fps,
         visibleLines: state.visibleLines,

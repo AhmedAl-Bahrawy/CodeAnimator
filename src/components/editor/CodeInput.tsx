@@ -133,7 +133,9 @@ export function CodeInput({ value, onChange, language = 'javascript', className 
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
 
   const getLanguage = useCallback(() => {
     const factory = languageMap[language] || languageMap.javascript;
@@ -175,7 +177,7 @@ export function CodeInput({ value, onChange, language = 'javascript', className 
       view.destroy();
       viewRef.current = null;
     };
-  }, [language]); // Re-create on language change
+  }, [language]); // Re-create on language change only; value sync is handled by separate effect
 
   // Sync external value changes
   useEffect(() => {

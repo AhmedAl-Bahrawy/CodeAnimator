@@ -10,7 +10,7 @@ import { TypingBehaviorControls } from './components/style/TypingBehaviorControl
 import { TypographyControls } from './components/style/TypographyControls';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
-import { useProjectStore, useThemeStore, useTimelineStore } from './stores';
+import { useProjectStore, useTimelineStore } from './stores';
 import { buildTimelineFromSource } from './core/timeline';
 import { parseMarkup } from './core/markup/parser';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -20,6 +20,7 @@ import { BrandKitManager } from './components/style/BrandKitManager';
 import { PresetLibraryDrawer } from './components/editor/PresetLibraryDrawer';
 import { MarkupLintPanel } from './components/editor/MarkupLintPanel';
 import { ProjectManager } from './components/projects/ProjectManager';
+import { startAutosaveSubscription } from './persistence/autosave';
 
 function App() {
   const projects = useProjectStore(s => s.projects);
@@ -29,7 +30,6 @@ function App() {
   const updateScene = useProjectStore(s => s.updateScene);
   const setTimeline = useTimelineStore(s => s.setTimeline);
 
-  const currentTheme = useThemeStore(s => s.themes.find(t => t.id === s.currentThemeId) || s.themes[0]);
   const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'preview'>('editor');
   const [showPresets, setShowPresets] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
@@ -45,6 +45,11 @@ function App() {
     }
   }, [currentProjectId, currentProject, createProject]);
 
+  // Wire autosave subscription (HIGH-01)
+  useEffect(() => {
+    startAutosaveSubscription(() => useProjectStore.getState().getCurrentProject());
+  }, []);
+
   // Build timeline when source changes (strip markup first)
   useEffect(() => {
     if (!currentScene) return;
@@ -56,6 +61,7 @@ function App() {
       markupEvents,
     });
     setTimeline(timeline);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig, setTimeline]);
 
   const handleCodeChange = useCallback((value: string) => {
@@ -90,6 +96,13 @@ function App() {
     if (!currentProject || !currentScene) return;
     updateScene(currentProject.id, currentSceneIndex, {
       typingConfig: { ...currentScene.typingConfig, ...updates },
+    });
+  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
+
+  const handleTypographyChange = useCallback((updates: Record<string, unknown>) => {
+    if (!currentProject || !currentScene) return;
+    updateScene(currentProject.id, currentSceneIndex, {
+      typography: { ...currentScene.typography, ...updates },
     });
   }, [currentProject, currentScene, currentSceneIndex, updateScene]);
 
@@ -176,13 +189,8 @@ function App() {
                   onChange={handleTypingChange}
                 />
                 <TypographyControls
-                  settings={{
-                    fontSize: 14,
-                    fontFamily: '"SF Mono", "Fira Code", monospace',
-                    lineHeight: 1.5,
-                    letterSpacing: 0,
-                  }}
-                  onChange={() => {}}
+                  settings={currentScene.typography}
+                  onChange={(updates) => handleTypographyChange(updates)}
                 />
                 <AspectRatioSelector
                   value={currentProject?.aspectRatio || '9:16'}

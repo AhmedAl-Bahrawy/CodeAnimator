@@ -1,55 +1,102 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { useProjectStore, useThemeStore, useTimelineStore } from '@/stores';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useProjectStore, useTimelineStore } from '@/stores';
 import { renderFrame } from '@/core/render/renderFrame';
 import { getStateAtTime } from '@/core/timeline/getStateAtTime';
-import { buildTimelineFromSource } from '@/core/timeline';
-import { parseMarkup } from '@/core/markup/parser';
 import { getBackgroundById } from '@/data/backgroundPresets';
-import type { Timeline } from '@/core/types';
+import { getThemeById } from '@/data/codeThemes';
+import { highlightCode, type HighlightResult } from '@/core/highlighting/shiki';
+import { aspectRatioPresets } from '@/data/platformPresets';
+import type { Timeline, CodeToken, AspectRatio } from '@/core/types';
+
+function resolveDimensions(aspectRatio: AspectRatio, customWidth?: number, customHeight?: number): { w: number; h: number } {
+  if (aspectRatio === 'custom' && customWidth && customHeight) {
+    return { w: customWidth, h: customHeight };
+  }
+  const preset = aspectRatioPresets.find(p => p.id === aspectRatio);
+  return { w: preset?.width ?? 1080, h: preset?.height ?? 1920 };
+}
 
 export function CanvasPreview() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
-  const isPlayingRef = useRef(false);
-  const currentTimeRef = useRef(0);
   const [scale, setScale] = useState(0.3);
+  const highlightCacheRef = useRef<Map<string, HighlightResult>>(new Map());
 
-  const currentScene = useProjectStore(s => {
-    const project = s.projects.find(p => p.id === s.currentProjectId);
-    return project ? project.scenes[s.currentSceneIndex] : null;
+  const currentProject = useProjectStore(s => {
+    return s.projects.find(p => p.id === s.currentProjectId) || null;
   });
+  const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
+  const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
 
-  const currentTheme = useThemeStore(s => {
-    return s.themes.find(t => t.id === s.currentThemeId) || s.themes[0];
-  });
+  // Resolve theme from scene codeThemeId (BLK-06)
+  const currentTheme = useMemo(() => {
+    if (!currentScene) return null;
+    return getThemeById(currentScene.codeThemeId) || null;
+  }, [currentScene?.codeThemeId]);
 
+  // Resolve dimensions from project aspect ratio (CRI-01)
+  const { w: canvasWidth, h: canvasHeight } = useMemo(() => {
+    return resolveDimensions(
+      currentProject?.aspectRatio ?? '9:16',
+      currentProject?.customWidth,
+      currentProject?.customHeight
+    );
+  }, [currentProject?.aspectRatio, currentProject?.customWidth, currentProject?.customHeight]);
+
+  // Use global timeline (CRI-09 — single source of truth)
+  const timeline = useTimelineStore(s => s.timeline);
   const isPlaying = useTimelineStore(s => s.isPlaying);
-  const currentTimeMs = useTimelineStore(s => s.currentTimeMs);
   const seek = useTimelineStore(s => s.seek);
   const play = useTimelineStore(s => s.play);
   const pause = useTimelineStore(s => s.pause);
 
-  isPlayingRef.current = isPlaying;
-  currentTimeRef.current = currentTimeMs;
+  // Keep refs for the animation loop to avoid stale closures
+  const isPlayingRef = useRef(false);
+  const currentTimeRef = useRef(0);
+  const timelineRef = useRef<Timeline | null>(null);
+  const renderFnRef = useRef<((tMs: number) => void) | null>(null);
 
-  const canvasWidth = 1080;
-  const canvasHeight = 1920;
-
-  // Build timeline from clean source (markup stripped)
-  const [timeline, setLocalTimeline] = useState<Timeline | null>(null);
-
+  // Sync refs outside render
   useEffect(() => {
-    if (!currentScene) return;
-    const { cleanSource, events: markupEvents } = parseMarkup(currentScene.sourceWithMarkup);
-    const tl = buildTimelineFromSource({
-      source: cleanSource,
-      typingConfig: currentScene.typingConfig,
-      fps: 30,
-      markupEvents,
-    });
-    setLocalTimeline(tl);
-  }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig]);
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+  useEffect(() => {
+    currentTimeRef.current = useTimelineStore.getState().currentTimeMs;
+  });
+  useEffect(() => {
+    timelineRef.current = timeline;
+  }, [timeline]);
+
+  // Shiki highlight cache
+  const [highlightResult, setHighlightResult] = useState<HighlightResult | null>(null);
+  useEffect(() => {
+    if (!currentScene || !currentTheme) return;
+    const cache = highlightCacheRef.current;
+    const cacheKey = `${currentScene.language}:${currentTheme.shikiTheme || currentTheme.id}:${currentScene.sourceWithMarkup}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setHighlightResult(cached);
+      return;
+    }
+    let cancelled = false;
+    highlightCode(currentScene.sourceWithMarkup, currentScene.language, currentTheme.shikiTheme || 'dracula')
+      .then(result => {
+        if (cancelled) return;
+        cache.set(cacheKey, result);
+        setHighlightResult(result);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [currentScene?.sourceWithMarkup, currentScene?.language, currentTheme]);
+
+  // Convert HighlightResult to CodeToken[][] for the renderer
+  const tokenLines = useMemo(() => {
+    if (!highlightResult) return null;
+    return highlightResult.lines.map(line =>
+      line.tokens.map(t => ({ content: t.content, color: t.color, offset: t.offset }))
+    );
+  }, [highlightResult]);
 
   // Scale observer
   useEffect(() => {
@@ -65,20 +112,24 @@ export function CanvasPreview() {
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [canvasWidth, canvasHeight]);
 
-  // Render a single frame
+  // Render a single frame (stable callback, reads refs)
   const renderFrameAt = useCallback((tMs: number) => {
     const canvas = canvasRef.current;
-    if (!canvas || !currentScene || !currentTheme || !timeline) return;
-
+    if (!canvas || !currentScene || !currentTheme) return;
+    const tl = timelineRef.current;
+    if (!tl) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const { cleanSource } = parseMarkup(currentScene.sourceWithMarkup);
-
-    const state = getStateAtTime(timeline, tMs, cleanSource, currentScene.typingConfig);
+    const state = getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
     const background = getBackgroundById(currentScene.backgroundPresetId);
+
+    // Resolve tokenLines per line for the renderer
+    const lineTokenData: CodeToken[][] | null = tokenLines
+      ? state.visibleLines.map((_, i) => tokenLines[i] || [])
+      : null;
 
     renderFrame({
       ctx,
@@ -88,30 +139,35 @@ export function CanvasPreview() {
       theme: currentTheme,
       background,
       windowChrome: currentScene.windowChrome,
+      typography: currentScene.typography,
       frameIndex: Math.round((tMs / 1000) * 30),
       fps: 30,
       visibleLines: state.visibleLines,
-      tokenLines: null,
+      tokenLines: lineTokenData,
     });
-  }, [currentScene, currentTheme, timeline]);
+  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines]);
 
-  // Animation loop
+  // Store renderFrameAt in ref for animation loop
+  useEffect(() => {
+    renderFnRef.current = renderFrameAt;
+  }, [renderFrameAt]);
+
+  // Animation loop — no global state updates per frame (CRI-05)
   useEffect(() => {
     if (!isPlaying || !timeline) return;
 
     const totalDuration = timeline.totalDurationMs;
     let startTimestamp: number | null = null;
-    let startOffset = currentTimeRef.current;
+    const startOffset = currentTimeRef.current;
 
     const animate = (timestamp: number) => {
       if (!startTimestamp) startTimestamp = timestamp;
-
       const elapsed = timestamp - startTimestamp;
       const newTime = (startOffset + elapsed) % totalDuration;
-
       currentTimeRef.current = newTime;
-      seek(newTime);
-      renderFrameAt(newTime);
+
+      // Draw directly to canvas without global state update
+      renderFnRef.current?.(newTime);
 
       if (isPlayingRef.current) {
         animationRef.current = requestAnimationFrame(animate);
@@ -121,13 +177,29 @@ export function CanvasPreview() {
     animationRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [isPlaying, timeline, renderFrameAt, seek]);
+  }, [isPlaying, timeline]);
 
-  // Render when paused
+  // Throttled UI progress sync (update global state at 20Hz, not 60Hz)
+  useEffect(() => {
+    if (!isPlaying) return;
+    let rafId = 0;
+    let lastSync = 0;
+    const sync = () => {
+      const now = performance.now();
+      if (now - lastSync > 50) {
+        seek(currentTimeRef.current);
+        lastSync = now;
+      }
+      if (isPlayingRef.current) rafId = requestAnimationFrame(sync);
+    };
+    rafId = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, seek]);
+
+  // Render when paused (on seek or state change)
+  const currentTimeMs = useTimelineStore(s => s.currentTimeMs);
   useEffect(() => {
     if (!isPlaying) {
       renderFrameAt(currentTimeMs);
@@ -144,7 +216,8 @@ export function CanvasPreview() {
       pause();
       cancelAnimationFrame(animationRef.current);
     } else {
-      if (currentTimeMs >= (timeline?.totalDurationMs || 0) - 100) {
+      const tl = timelineRef.current;
+      if (tl && currentTimeMs >= tl.totalDurationMs - 100) {
         seek(0);
       }
       play();

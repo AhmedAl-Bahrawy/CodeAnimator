@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ExportFormat, ExportTier, ExportOptions, Timeline } from '@/core/types';
+import type { ExportFormat, ExportTier } from '@/core/types';
 
 interface ExportStore {
   // State
@@ -22,7 +22,6 @@ interface ExportStore {
   cancelExport: () => void;
 
   // Computed
-  getExportOptions: (timeline: Timeline, width: number, height: number) => ExportOptions;
   detectBestTier: () => ExportTier;
 }
 
@@ -62,18 +61,6 @@ export const useExportStore = create<ExportStore>((set, get) => ({
       progress: 0,
       abortController: null,
     });
-  },
-
-  getExportOptions: (timeline, width, height) => {
-    const { format, fps, playbackSpeedMultiplier } = get();
-    return {
-      timeline,
-      width,
-      height,
-      fps,
-      format,
-      playbackSpeedMultiplier,
-    };
   },
 
   detectBestTier: (): ExportTier => {

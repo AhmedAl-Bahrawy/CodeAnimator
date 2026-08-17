@@ -2,7 +2,6 @@ import { saveProject } from './projectRepo';
 import type { Project } from '@/core/types';
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
-let lastSavedProjectId: string | null = null;
 let lastSavedHash: string = '';
 
 function hashProject(project: Project): string {
@@ -11,7 +10,7 @@ function hashProject(project: Project): string {
 
 export function scheduleAutosave(project: Project): void {
   const hash = hashProject(project);
-  if (hash === lastSavedHash) return; // No changes
+  if (hash === lastSavedHash) return;
 
   if (autosaveTimer) {
     clearTimeout(autosaveTimer);
@@ -20,13 +19,11 @@ export function scheduleAutosave(project: Project): void {
   autosaveTimer = setTimeout(async () => {
     try {
       await saveProject(project);
-      lastSavedProjectId = project.id;
       lastSavedHash = hash;
-      console.log('[Autosave] Project saved:', project.name);
     } catch (err) {
       console.error('[Autosave] Failed to save:', err);
     }
-  }, 1500); // Debounce 1.5s
+  }, 1500);
 }
 
 export function cancelAutosave(): void {
@@ -34,4 +31,47 @@ export function cancelAutosave(): void {
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
   }
+}
+
+export function resetAutosaveHash(): void {
+  lastSavedHash = '';
+}
+
+// Wire autosave to store changes
+let unsubscribe: (() => void) | null = null;
+
+export function startAutosaveSubscription(
+  getProject: () => Project | null
+): void {
+  if (unsubscribe) return;
+
+  // Import dynamically to avoid circular deps
+  import('@/stores/projectStore').then(({ useProjectStore }) => {
+    unsubscribe = useProjectStore.subscribe((state) => {
+      const project = state.projects.find(p => p.id === state.currentProjectId);
+      if (project) {
+        scheduleAutosave(project);
+      }
+    });
+
+    // Flush on unload
+    window.addEventListener('beforeunload', () => {
+      const project = getProject();
+      if (project) {
+        // Synchronous best-effort save
+        const hash = hashProject(project);
+        if (hash !== lastSavedHash) {
+          navigator.sendBeacon?.('about:blank'); // placeholder
+          saveProject(project).catch(() => {});
+          lastSavedHash = hash;
+        }
+      }
+    });
+  });
+}
+
+export function stopAutosaveSubscription(): void {
+  unsubscribe?.();
+  unsubscribe = null;
+  cancelAutosave();
 }

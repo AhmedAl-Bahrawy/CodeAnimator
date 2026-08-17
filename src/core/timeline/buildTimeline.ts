@@ -25,23 +25,57 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
 
   const lines = source.split('\n');
 
-  events.push({ tMs: 0, type: 'cursor-jump', payload: { line: 0, col: 0 } });
+  // Build a speed map from markup events (lineIndex -> speed)
+  const speedMap = new Map<number, number>();
+  for (const me of markupEvents) {
+    if (me.type === 'set-speed') {
+      speedMap.set(me.lineIndex ?? 0, (me.payload as { speed: number }).speed);
+    }
+  }
 
-  // Track time-at-start-of-each-line so we can position markup events
-  const lineStartTimes: number[] = [0];
+  // Build a list of per-line markup events (excluding speed, which is handled via speedMap)
+  const perLineMarkup = new Map<number, (TimelineEvent & { lineIndex?: number })[]>();
+  for (const me of markupEvents) {
+    if (me.type === 'set-speed') continue;
+    const lineIdx = me.lineIndex ?? 0;
+    if (!perLineMarkup.has(lineIdx)) perLineMarkup.set(lineIdx, []);
+    perLineMarkup.get(lineIdx)!.push(me);
+  }
+
+  // Emit typing events, inserting markup and pauses at the right moments
+  // BLK-04: Build events in one pass so pauses properly shift subsequent events
+
+  // Start with cursor jump
+  events.push({ tMs: 0, type: 'cursor-jump', payload: { line: 0, col: 0 } });
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
-    lineStartTimes[lineIdx] = currentTimeMs;
 
-    // Check if there's a speed-change markup event for this line
-    const speedMarkup = markupEvents.find(
-      me => me.lineIndex === lineIdx && me.type === 'set-speed'
-    );
-    if (speedMarkup) {
-      currentSpeed = (speedMarkup.payload as { speed: number }).speed;
+    // Check for speed change on this line
+    if (speedMap.has(lineIdx)) {
+      currentSpeed = speedMap.get(lineIdx)!;
+      events.push({
+        tMs: currentTimeMs,
+        type: 'set-speed',
+        payload: { speed: currentSpeed },
+      } as TimelineEvent);
     }
 
+    // Emit pre-line markup events (e.g. highlight, focus, pause, clear, cut)
+    const lineMarkup = perLineMarkup.get(lineIdx) || [];
+    const pauseEvents = lineMarkup.filter(e => e.type === 'pause');
+    const otherMarkup = lineMarkup.filter(e => e.type !== 'pause');
+
+    // Non-pause markup events at the start of this line
+    for (const me of otherMarkup) {
+      events.push({
+        tMs: currentTimeMs,
+        type: me.type,
+        payload: { ...me.payload },
+      });
+    }
+
+    // Typing events for this line
     if (typingConfig.mode === 'line') {
       currentTimeMs += getTimeForUnit(currentSpeed);
       events.push({
@@ -70,6 +104,20 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
       }
     }
 
+    // Pause events AFTER this line's typing (BLK-04 proper)
+    for (const pauseEv of pauseEvents) {
+      const pauseDurationMs = (pauseEv.payload as { durationMs: number }).durationMs;
+      // Emit the pause event
+      events.push({
+        tMs: currentTimeMs,
+        type: 'pause',
+        payload: { durationMs: pauseDurationMs },
+      });
+      // Shift current time forward — this is the key fix
+      currentTimeMs += pauseDurationMs;
+    }
+
+    // Newline between lines (not after the last line)
     if (lineIdx < lines.length - 1) {
       currentTimeMs += getTimeForUnit(currentSpeed) * 0.5;
       events.push({
@@ -80,37 +128,9 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
     }
   }
 
-  // Now insert markup events at the correct time (after their line starts typing)
-  const nonSpeedMarkup = markupEvents.filter(me => me.type !== 'set-speed');
-  let timeShift = 0;
-
-  for (const markupEvent of nonSpeedMarkup) {
-    const lineIdx = (markupEvent as { lineIndex?: number }).lineIndex ?? 0;
-    const insertTime = (lineStartTimes[lineIdx] || 0) + timeShift;
-
-    const event: TimelineEvent = {
-      tMs: insertTime,
-      type: markupEvent.type,
-      payload: { ...markupEvent.payload },
-    };
-
-    // Handle pause: shift all subsequent events by pause duration
-    if (markupEvent.type === 'pause') {
-      const pauseDuration = (markupEvent.payload as { durationMs: number }).durationMs;
-      timeShift += pauseDuration;
-    }
-
-    const insertIdx = events.findIndex(e => e.tMs > event.tMs);
-    if (insertIdx >= 0) {
-      events.splice(insertIdx, 0, event);
-    } else {
-      events.push(event);
-    }
-  }
-
   events.sort((a, b) => a.tMs - b.tMs);
 
-  // Add 2s trailing silence for the final frame to linger
+  // Add 2s trailing silence
   const totalDurationMs = events.length > 0
     ? events[events.length - 1].tMs + 2000
     : 2000;
