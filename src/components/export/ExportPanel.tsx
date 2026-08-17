@@ -89,6 +89,7 @@ export function ExportPanel() {
         {
           timeline,
           source: cleanSource,
+          language: currentScene.language,
           typingConfig: currentScene.typingConfig,
           theme: sceneTheme,
           background,

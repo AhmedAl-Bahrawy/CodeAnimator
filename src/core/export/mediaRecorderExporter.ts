@@ -1,22 +1,34 @@
-import type { Exporter, ExportOptions } from '@/core/types';
-import { renderFrame } from '@/core/render/renderFrame';
-import { getStateAtTime } from '@/core/timeline/getStateAtTime';
+import type { Exporter, ExportOptions, CodeToken } from '@/core/types';
+import { highlightCode } from '@/core/highlighting/shiki';
+import { RenderCoordinator } from './renderCoordinator';
 
 export const mediaRecorderExporter: Exporter = {
   tierName: 'mediarecorder',
   isSupported: typeof window !== 'undefined' && 'MediaRecorder' in window && typeof HTMLCanvasElement.prototype.captureStream === 'function',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, typingConfig, theme, background, windowChrome, typography, width, height, fps } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps } = opts;
 
     if (!this.isSupported) {
       throw new Error('MediaRecorder not supported');
     }
 
+    // Pre-compute Shiki tokens on main thread
+    let allTokenLines: CodeToken[][] | null = null;
+    try {
+      const highlightResult = await highlightCode(source, language, theme.shikiTheme || theme.id);
+      allTokenLines = highlightResult.lines.map(line =>
+        line.tokens.map(t => ({ content: t.content, color: t.color, offset: t.offset }))
+      );
+    } catch {
+      // Fallback: render without syntax highlighting
+    }
+
+    // Main-thread canvas for MediaRecorder captureStream (required by spec)
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const ctx = canvas.getContext('2d')!;
+    const mainCtx = canvas.getContext('2d')!;
 
     const stream = (canvas as HTMLCanvasElement).captureStream(fps);
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -47,47 +59,61 @@ export const mediaRecorderExporter: Exporter = {
       if (signal) {
         signal.addEventListener('abort', () => {
           cancelled = true;
+          coordinator.cancel();
           recorder.stop();
-        });
+        }, { once: true });
       }
 
+      // Spawn render worker
+      const coordinator = new RenderCoordinator({
+        width,
+        height,
+        fps,
+        timeline,
+        source,
+        typingConfig,
+        theme,
+        background,
+        windowChrome,
+        typography,
+        tokenLines: allTokenLines,
+        onFrameReady: () => {}, // dispatched as frames arrive
+      });
+
+      coordinator.startPipeline(2);
       recorder.start();
 
-      const totalFrames = Math.ceil((timeline.totalDurationMs / 1000) * fps);
+      const totalFrames = coordinator.totalFrameCount;
       const frameDuration = 1000 / fps;
-      let currentFrame = 0;
 
-      function renderNextFrame() {
-        if (cancelled || currentFrame >= totalFrames) {
-          if (recorder.state !== 'inactive') recorder.stop();
-          return;
+      (async () => {
+        try {
+          let frame: Awaited<ReturnType<RenderCoordinator['nextFrame']>>;
+          while ((frame = await coordinator.nextFrame()) !== null) {
+            if (cancelled) break;
+
+            // Paint worker-rendered bitmap onto main-thread canvas for captureStream
+            mainCtx.clearRect(0, 0, width, height);
+            mainCtx.drawImage(frame.bitmap, 0, 0);
+            frame.bitmap.close();
+
+            onProgress(Math.round((frame.frameIndex / totalFrames) * 95));
+
+            // Wait frame duration to maintain real-time recording pace
+            await new Promise(r => setTimeout(r, frameDuration));
+          }
+        } catch (err) {
+          if (!(err instanceof Error && err.message.includes('cancelled'))) {
+            recorder.onerror = () => {};
+            recorder.stop();
+            reject(err);
+            return;
+          }
         }
 
-        const tMs = (currentFrame / fps) * 1000;
-        const state = getStateAtTime(timeline, tMs, source, typingConfig);
-
-        renderFrame({
-          ctx,
-          width,
-          height,
-          state,
-          theme,
-          background,
-          windowChrome,
-          typography,
-          frameIndex: currentFrame,
-          fps,
-          visibleLines: state.visibleLines,
-          tokenLines: null,
-        });
-
-        currentFrame++;
-        onProgress(Math.round((currentFrame / totalFrames) * 95));
-
-        setTimeout(renderNextFrame, frameDuration);
-      }
-
-      renderNextFrame();
+        if (recorder.state !== 'inactive') recorder.stop();
+        coordinator.terminate();
+      })();
     });
   },
 };

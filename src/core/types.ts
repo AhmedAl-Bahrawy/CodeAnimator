@@ -188,6 +188,7 @@ export type ExportTier = 'webcodecs' | 'mediarecorder' | 'ffmpeg-wasm' | 'gif';
 export interface ExportOptions {
   timeline: Timeline;
   source: string;
+  language: string;
   typingConfig: TypingConfig;
   theme: CodeTheme;
   background: BackgroundPreset;

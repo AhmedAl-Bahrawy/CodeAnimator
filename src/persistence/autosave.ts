@@ -1,4 +1,5 @@
 import { saveProject } from './projectRepo';
+import { useProjectStore } from '@/stores/projectStore';
 import type { Project } from '@/core/types';
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -45,28 +46,23 @@ export function startAutosaveSubscription(
 ): void {
   if (unsubscribe) return;
 
-  // Import dynamically to avoid circular deps
-  import('@/stores/projectStore').then(({ useProjectStore }) => {
-    unsubscribe = useProjectStore.subscribe((state) => {
-      const project = state.projects.find(p => p.id === state.currentProjectId);
-      if (project) {
-        scheduleAutosave(project);
-      }
-    });
+  unsubscribe = useProjectStore.subscribe((state) => {
+    const project = state.projects.find(p => p.id === state.currentProjectId);
+    if (project) {
+      scheduleAutosave(project);
+    }
+  });
 
-    // Flush on unload
-    window.addEventListener('beforeunload', () => {
-      const project = getProject();
-      if (project) {
-        // Synchronous best-effort save
-        const hash = hashProject(project);
-        if (hash !== lastSavedHash) {
-          navigator.sendBeacon?.('about:blank'); // placeholder
-          saveProject(project).catch(() => {});
-          lastSavedHash = hash;
-        }
+  // Flush on unload
+  window.addEventListener('beforeunload', () => {
+    const project = getProject();
+    if (project) {
+      const hash = hashProject(project);
+      if (hash !== lastSavedHash) {
+        saveProject(project).catch(() => {});
+        lastSavedHash = hash;
       }
-    });
+    }
   });
 }
 
