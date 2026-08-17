@@ -6,7 +6,7 @@ import { getBackgroundById } from '@/data/backgroundPresets';
 import { getThemeById } from '@/data/codeThemes';
 import { highlightCode, type HighlightResult } from '@/core/highlighting/shiki';
 import { aspectRatioPresets } from '@/data/platformPresets';
-import type { Timeline, CodeToken, AspectRatio } from '@/core/types';
+import type { Timeline, CanvasState, CodeToken, AspectRatio } from '@/core/types';
 
 function resolveDimensions(aspectRatio: AspectRatio, customWidth?: number, customHeight?: number): { w: number; h: number } {
   if (aspectRatio === 'custom' && customWidth && customHeight) {
@@ -55,7 +55,7 @@ export function CanvasPreview() {
   const isPlayingRef = useRef(false);
   const currentTimeRef = useRef(0);
   const timelineRef = useRef<Timeline | null>(null);
-  const renderFnRef = useRef<((tMs: number) => void) | null>(null);
+  const renderFnRef = useRef<((tMs: number, forceFullSource?: boolean) => void) | null>(null);
 
   // Sync refs outside render
   useEffect(() => {
@@ -114,8 +114,26 @@ export function CanvasPreview() {
     return () => observer.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  // Render a single frame (stable callback, reads refs)
-  const renderFrameAt = useCallback((tMs: number) => {
+  // Build the "full source" state — shows all lines as fully typed
+  const buildFullSourceState = useCallback((): CanvasState | null => {
+    if (!currentScene || !timeline) return null;
+    const allLines = currentScene.sourceWithMarkup.split('\n');
+    return {
+      visibleText: currentScene.sourceWithMarkup,
+      visibleLines: allLines,
+      tokens: [],
+      cursorLine: allLines.length - 1,
+      cursorCol: allLines[allLines.length - 1].length,
+      activeHighlightRange: null,
+      focusLine: null,
+      scrollOffsetPx: 0,
+      zoomLevel: 1,
+      typingSpeed: currentScene.typingConfig.baseSpeed,
+    };
+  }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig, timeline]);
+
+  // Render a single frame
+  const renderFrameAt = useCallback((tMs: number, forceFullSource = false) => {
     const canvas = canvasRef.current;
     if (!canvas || !currentScene || !currentTheme) return;
     const tl = timelineRef.current;
@@ -123,8 +141,16 @@ export function CanvasPreview() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const state = getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
     const background = getBackgroundById(currentScene.backgroundPresetId);
+
+    // When paused and not seeking, show full source (all lines visible)
+    // When playing, show the typing animation state
+    let state: CanvasState;
+    if (forceFullSource) {
+      state = buildFullSourceState() || getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
+    } else {
+      state = getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
+    }
 
     // Resolve tokenLines per line for the renderer
     const lineTokenData: CodeToken[][] | null = tokenLines
@@ -146,7 +172,7 @@ export function CanvasPreview() {
       visibleLines: state.visibleLines,
       tokenLines: lineTokenData,
     });
-  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines]);
+  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines, buildFullSourceState]);
 
   // Store renderFrameAt in ref for animation loop
   useEffect(() => {
@@ -168,7 +194,8 @@ export function CanvasPreview() {
       currentTimeRef.current = newTime;
 
       // Draw directly to canvas without global state update
-      renderFnRef.current?.(newTime);
+      // During animation, render the typing state (not full source)
+      renderFnRef.current?.(newTime, false);
 
       if (isPlayingRef.current) {
         animationRef.current = requestAnimationFrame(animate);
@@ -199,17 +226,17 @@ export function CanvasPreview() {
     return () => cancelAnimationFrame(rafId);
   }, [isPlaying, seek]);
 
-  // Render when paused (on seek or state change)
+  // Render when paused — show full source (all lines visible)
   const currentTimeMs = useTimelineStore(s => s.currentTimeMs);
   useEffect(() => {
     if (!isPlaying) {
-      renderFrameAt(currentTimeMs);
+      renderFrameAt(currentTimeMs, true);
     }
   }, [isPlaying, renderFrameAt, currentTimeMs]);
 
-  // Initial render
+  // Initial render — show full source immediately
   useEffect(() => {
-    renderFrameAt(0);
+    renderFrameAt(0, true);
   }, [renderFrameAt]);
 
   const togglePlayPause = () => {
@@ -272,7 +299,8 @@ export function CanvasPreview() {
           onChange={(e) => {
             const t = Number(e.target.value);
             seek(t);
-            renderFrameAt(t);
+            // When seeking while paused, show the animated state at that time
+            renderFrameAt(t, false);
           }}
           className="flex-1 h-1.5 rounded-full appearance-none bg-[var(--bg-surface)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:cursor-pointer"
         />
