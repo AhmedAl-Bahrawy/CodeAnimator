@@ -1,8 +1,34 @@
-import { useThemeStore } from '@/stores';
+import { useMemo } from 'react';
+import { useProjectStore, useThemeStore } from '@/stores';
+import { getThemeById } from '@/data/codeThemes';
 import { cn } from '@/lib/utils';
 
 export function CodeThemeGallery() {
-  const { themes, currentThemeId, setTheme } = useThemeStore();
+  const themes = useThemeStore(s => s.themes);
+
+  // Read scene's codeThemeId for selection highlight
+  const currentSceneThemeId = useProjectStore(s => {
+    const project = s.projects.find(p => p.id === s.currentProjectId);
+    return project ? project.scenes[s.currentSceneIndex]?.codeThemeId : null;
+  });
+
+  const currentProject = useProjectStore(s => {
+    return s.projects.find(p => p.id === s.currentProjectId) || null;
+  });
+  const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
+  const updateScene = useProjectStore(s => s.updateScene);
+
+  // Resolve the current theme name for display
+  const currentTheme = useMemo(() => {
+    if (!currentSceneThemeId) return null;
+    return getThemeById(currentSceneThemeId) || null;
+  }, [currentSceneThemeId]);
+
+  const handleThemeSelect = (themeId: string) => {
+    if (!currentProject) return;
+    // Update the scene's codeThemeId, not the global store
+    updateScene(currentProject.id, currentSceneIndex, { codeThemeId: themeId });
+  };
 
   const categories = [
     { id: 'editor-classic' as const, label: 'Editor Classics' },
@@ -12,6 +38,12 @@ export function CodeThemeGallery() {
 
   return (
     <div className="space-y-4">
+      <h4 className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider mb-2">
+        Code Theme
+        {currentTheme && (
+          <span className="ml-2 normal-case text-[var(--text-secondary)]">— {currentTheme.name}</span>
+        )}
+      </h4>
       {categories.map((cat) => {
         const catThemes = themes.filter((t) => t.category === cat.id);
         if (catThemes.length === 0) return null;
@@ -25,10 +57,10 @@ export function CodeThemeGallery() {
               {catThemes.map((theme) => (
                 <button
                   key={theme.id}
-                  onClick={() => setTheme(theme.id)}
+                  onClick={() => handleThemeSelect(theme.id)}
                   className={cn(
                     'group relative rounded-lg p-2 text-left transition-all cursor-pointer border-2',
-                    currentThemeId === theme.id
+                    currentSceneThemeId === theme.id
                       ? 'border-[var(--accent)] ring-1 ring-[var(--accent)]'
                       : 'border-transparent hover:border-[var(--border)]'
                   )}

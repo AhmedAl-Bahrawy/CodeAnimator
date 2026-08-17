@@ -22,7 +22,6 @@ interface ProjectStore {
 
   // Getters
   getCurrentProject: () => Project | null;
-  getCurrentScene: () => Scene | null;
 }
 
 const defaultTypingConfig: TypingConfig = {
@@ -66,7 +65,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         language: 'javascript',
         sourceWithMarkup: '// Welcome to CodeReel!\nfunction greet(name) {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet("World"));',
         codeThemeId: 'dracula',
-        backgroundPresetId: 'default',
+        backgroundPresetId: 'mesh-gradient-1',
         windowChrome: { ...defaultWindowChrome },
         typingConfig: { ...defaultTypingConfig },
         typography: { ...defaultTypography },
@@ -131,7 +130,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           language: 'javascript',
           sourceWithMarkup: '',
           codeThemeId: p.scenes[0]?.codeThemeId || 'dracula',
-          backgroundPresetId: p.scenes[0]?.backgroundPresetId || 'default',
+          backgroundPresetId: p.scenes[0]?.backgroundPresetId || 'mesh-gradient-1',
           windowChrome: { ...defaultWindowChrome },
           typingConfig: { ...defaultTypingConfig },
           typography: { ...defaultTypography },
@@ -170,11 +169,5 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   getCurrentProject: () => {
     const { projects, currentProjectId } = get();
     return projects.find(p => p.id === currentProjectId) || null;
-  },
-
-  getCurrentScene: () => {
-    const project = get().getCurrentProject();
-    if (!project) return null;
-    return project.scenes[get().currentSceneIndex] || null;
   },
 }));

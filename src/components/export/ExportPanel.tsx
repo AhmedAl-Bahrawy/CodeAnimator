@@ -108,7 +108,7 @@ export function ExportPanel() {
       const a = document.createElement('a');
       a.href = url;
       // BLK-02: Use correct file extension based on actual blob MIME type
-      const ext = format === 'gif' ? 'gif' : blob.type.includes('webm') ? 'webm' : format;
+      const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('gif') ? 'gif' : format;
       a.download = `codereel-export.${ext}`;
       document.body.appendChild(a);
       a.click();
@@ -169,6 +169,10 @@ export function ExportPanel() {
               {f.toUpperCase()}
             </Button>
           ))}
+        </div>
+        <div className="text-[10px] text-[var(--text-muted)]">
+          {format === 'gif' && 'Note: GIF output uses WebM container for compatibility. Rename to .webm if needed.'}
+          {format === 'mp4' && bestTier !== 'webcodecs' && 'Note: MP4 fallback to WebM via MediaRecorder.'}
         </div>
       </div>
 

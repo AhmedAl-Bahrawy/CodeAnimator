@@ -1,17 +1,26 @@
-import { useProjectStore, useThemeStore, useUISkinStore } from '@/stores';
+import { useMemo } from 'react';
+import { useProjectStore, useUISkinStore } from '@/stores';
+import { getThemeById } from '@/data/codeThemes';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 
 export function TopBar() {
   const projects = useProjectStore(s => s.projects);
   const currentProjectId = useProjectStore(s => s.currentProjectId);
+  const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
   const createProject = useProjectStore(s => s.createProject);
   const setCurrentProject = useProjectStore(s => s.setCurrentProject);
 
-  const currentTheme = useThemeStore(s => s.themes.find(t => t.id === s.currentThemeId) || s.themes[0]);
-  const currentSkin = useUISkinStore(s => s.skins.find(sk => sk.id === s.currentSkinId));
-
   const currentProject = projects.find(p => p.id === currentProjectId);
+  const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] : null;
+
+  // Resolve theme from scene codeThemeId
+  const currentTheme = useMemo(() => {
+    if (!currentScene) return null;
+    return getThemeById(currentScene.codeThemeId) || null;
+  }, [currentScene?.codeThemeId]);
+
+  const currentSkin = useUISkinStore(s => s.skins.find(sk => sk.id === s.currentSkinId));
 
   return (
     <header className="h-12 flex items-center px-4 border-b border-[var(--border)] bg-[var(--bg-elevated)] shrink-0">
@@ -54,15 +63,17 @@ export function TopBar() {
 
       <div className="flex-1" />
 
-      {/* Theme indicator */}
-      <div className="flex items-center gap-2 mr-3">
-        <div
-          className="w-3 h-3 rounded-full border border-[var(--border-strong)]"
-          style={{ backgroundColor: currentTheme.background }}
-          title={`Theme: ${currentTheme.name}`}
-        />
-        <span className="text-[10px] text-[var(--text-muted)]">{currentTheme.name}</span>
-      </div>
+      {/* Theme indicator — reads from scene codeThemeId */}
+      {currentTheme && (
+        <div className="flex items-center gap-2 mr-3">
+          <div
+            className="w-3 h-3 rounded-full border border-[var(--border-strong)]"
+            style={{ backgroundColor: currentTheme.background }}
+            title={`Theme: ${currentTheme.name}`}
+          />
+          <span className="text-[10px] text-[var(--text-muted)]">{currentTheme.name}</span>
+        </div>
+      )}
 
       {/* Skin indicator */}
       {currentSkin && (

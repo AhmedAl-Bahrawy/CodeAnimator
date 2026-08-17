@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { useMemo } from 'react';
 import type { Timeline, CanvasState, TypingConfig } from '@/core/types';
-import { buildTimelineFromSource } from '@/core/timeline';
 import { getStateAtTime } from '@/core/timeline/getStateAtTime';
 
 interface TimelineStore {
@@ -56,18 +54,3 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
     return getStateAtTime(timeline, tMs, source, typingConfig);
   },
 }));
-
-// Helper hook to build timeline from source
-export function useBuildTimeline(
-  source: string,
-  typingConfig: TypingConfig,
-  fps: number = 30
-): Timeline {
-  return useMemo(() => {
-    return buildTimelineFromSource({
-      source,
-      typingConfig,
-      fps,
-    });
-  }, [source, typingConfig, fps]);
-}
