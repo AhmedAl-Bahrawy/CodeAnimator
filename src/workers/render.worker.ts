@@ -17,6 +17,7 @@ export type WorkerInMessage =
       windowChrome: WindowChromeConfig;
       typography: TypographySettings;
       tokenLines: CodeToken[][] | null;
+      speedMultiplier: number;
     }
   | { type: 'render-frame'; frameIndex: number }
   | { type: 'cancel' };
@@ -44,6 +45,7 @@ let config: {
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
   tokenLines: CodeToken[][] | null;
+  speedMultiplier: number;
 } | null = null;
 
 self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
@@ -64,6 +66,7 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         windowChrome: msg.windowChrome,
         typography: msg.typography,
         tokenLines: msg.tokenLines,
+        speedMultiplier: msg.speedMultiplier,
       };
       canvas = new OffscreenCanvas(msg.width, msg.height);
       ctx = canvas.getContext('2d');
@@ -80,7 +83,10 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
       if (cancelled) return;
 
       const { frameIndex } = msg;
-      const tMs = (frameIndex / config.fps) * 1000;
+      // Apply the export playback speed multiplier: higher multiplier = shorter
+      // virtual duration per frame, so the video plays back faster.
+      const effectiveFps = config.fps * (config.speedMultiplier || 1);
+      const tMs = (frameIndex / effectiveFps) * 1000;
       const state = getStateAtTime(config.timeline, tMs, config.source, config.typingConfig);
 
       // Map pre-computed token lines to visible lines

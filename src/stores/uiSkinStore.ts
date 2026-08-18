@@ -3,6 +3,11 @@ import type { UISkin, BrandKit } from '@/core/types';
 import { uiSkins, getUISkinById } from '@/data/uiSkins';
 import { generateId } from '@/lib/utils';
 import { useProjectStore } from './projectStore';
+import {
+  saveCustomSkin as persistCustomSkin,
+  loadCustomSkins as persistLoadCustomSkins,
+  deleteCustomSkin as persistDeleteCustomSkin,
+} from '@/persistence/skinRepo';
 
 interface UISkinStore {
   skins: UISkin[];
@@ -13,6 +18,7 @@ interface UISkinStore {
   setSkin: (id: string) => void;
   addCustomSkin: (skin: UISkin) => void;
   removeCustomSkin: (id: string) => void;
+  loadCustomSkins: () => Promise<void>;
 
   createBrandKit: (name: string) => BrandKit;
   setBrandKit: (id: string) => void;
@@ -35,13 +41,35 @@ export const useUISkinStore = create<UISkinStore>((set, get) => ({
     applySkinToDocument(skin);
   },
 
-  addCustomSkin: (skin) => set(state => ({
-    skins: [...state.skins, skin],
-  })),
+  addCustomSkin: (skin) => {
+    set(state => ({
+      skins: [...state.skins, skin],
+    }));
+    // Persist custom skins to IndexedDB so they survive page reloads (BLK-08).
+    void persistCustomSkin(skin);
+  },
 
-  removeCustomSkin: (id) => set(state => ({
-    skins: state.skins.filter(s => s.id !== id),
-  })),
+  removeCustomSkin: (id) => {
+    set(state => ({
+      skins: state.skins.filter(s => s.id !== id),
+    }));
+    void persistDeleteCustomSkin(id);
+  },
+
+  /** Hydrate custom skins from IndexedDB — call once on app mount. */
+  loadCustomSkins: async () => {
+    try {
+      const custom = await persistLoadCustomSkins();
+      set({
+        skins: [
+          ...uiSkins,
+          ...custom.filter(c => !uiSkins.some(builtin => builtin.id === c.id)),
+        ],
+      });
+    } catch {
+      // Persistence unavailable — keep built-in skins only
+    }
+  },
 
   createBrandKit: (name) => {
     const { currentSkinId } = get();
@@ -90,6 +118,7 @@ export const useUISkinStore = create<UISkinStore>((set, get) => ({
         codeThemeId: kit.codeThemeId,
         backgroundPresetId: kit.backgroundPresetId,
       });
+      projectState.updateProject(project.id, { brandKitId: id });
     }
   },
 

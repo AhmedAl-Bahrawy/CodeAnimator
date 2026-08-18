@@ -9,27 +9,6 @@ export function generateId(): string {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-export function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-// Deterministic hash for seeded RNG
-export function seededRandom(seed: number): () => number {
-  let s = seed;
-  return () => {
-    s = (s * 16807 + 0) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
 // Binary search for timeline events
 export function binarySearchTime<T extends { tMs: number }>(
   events: T[],

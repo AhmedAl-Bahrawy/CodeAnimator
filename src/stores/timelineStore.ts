@@ -4,17 +4,16 @@ import { getStateAtTime } from '@/core/timeline/getStateAtTime';
 
 interface TimelineStore {
   timeline: Timeline | null;
+  /** Markup-stripped source that the timeline was built from (single source of truth). */
+  cleanSource: string;
   isPlaying: boolean;
   currentTimeMs: number;
-  previewCanvasWidth: number;
-  previewCanvasHeight: number;
 
   // Actions
-  setTimeline: (timeline: Timeline) => void;
+  setTimeline: (timeline: Timeline, cleanSource: string) => void;
   play: () => void;
   pause: () => void;
   seek: (timeMs: number) => void;
-  setPreviewDimensions: (width: number, height: number) => void;
 
   // Derived
   getTimeline: () => Timeline | null;
@@ -23,12 +22,11 @@ interface TimelineStore {
 
 export const useTimelineStore = create<TimelineStore>((set, get) => ({
   timeline: null,
+  cleanSource: '',
   isPlaying: false,
   currentTimeMs: 0,
-  previewCanvasWidth: 1080,
-  previewCanvasHeight: 1920,
 
-  setTimeline: (timeline) => set({ timeline }),
+  setTimeline: (timeline, cleanSource) => set({ timeline, cleanSource }),
 
   play: () => set({ isPlaying: true }),
 
@@ -40,11 +38,6 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
       set({ currentTimeMs: Math.max(0, Math.min(timeMs, timeline.totalDurationMs)) });
     }
   },
-
-  setPreviewDimensions: (width, height) => set({
-    previewCanvasWidth: width,
-    previewCanvasHeight: height,
-  }),
 
   getTimeline: () => get().timeline,
 

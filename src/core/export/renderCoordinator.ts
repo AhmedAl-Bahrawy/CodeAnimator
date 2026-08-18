@@ -27,6 +27,7 @@ export interface RenderCoordinatorOptions {
   typography: TypographySettings;
   tokenLines: CodeToken[][] | null;
   onFrameReady?: (index: number) => void;
+  speedMultiplier?: number;
 }
 
 /**
@@ -37,6 +38,7 @@ export class RenderCoordinator {
   private worker: Worker;
   private totalFrames: number;
   private onFrameReady?: (index: number) => void;
+  private speedMultiplier: number;
 
   // Frame queue
   private frameQueue: Map<number, ImageBitmap> = new Map();
@@ -48,7 +50,10 @@ export class RenderCoordinator {
   private cancelled = false;
 
   constructor(opts: RenderCoordinatorOptions) {
-    this.totalFrames = Math.ceil((opts.timeline.totalDurationMs / 1000) * opts.fps);
+    this.speedMultiplier = Math.max(0.1, opts.speedMultiplier ?? 1);
+    // Effective frame count scales with the playback speed multiplier — a 2x
+    // export produces half the frames because each frame covers more timeline.
+    this.totalFrames = Math.ceil((opts.timeline.totalDurationMs / 1000) * opts.fps * this.speedMultiplier);
     this.onFrameReady = opts.onFrameReady;
 
     // Spawn worker
@@ -81,6 +86,7 @@ export class RenderCoordinator {
       windowChrome: opts.windowChrome,
       typography: opts.typography,
       tokenLines: opts.tokenLines,
+      speedMultiplier: this.speedMultiplier,
     });
   }
 

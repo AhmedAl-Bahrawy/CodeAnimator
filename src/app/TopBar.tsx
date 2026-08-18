@@ -4,7 +4,11 @@ import { getThemeById } from '@/data/codeThemes';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 
-export function TopBar() {
+interface TopBarProps {
+  onOpenProjects?: () => void;
+}
+
+export function TopBar({ onOpenProjects }: TopBarProps) {
   const projects = useProjectStore(s => s.projects);
   const currentProjectId = useProjectStore(s => s.currentProjectId);
   const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
@@ -18,7 +22,7 @@ export function TopBar() {
   const currentTheme = useMemo(() => {
     if (!currentScene) return null;
     return getThemeById(currentScene.codeThemeId) || null;
-  }, [currentScene?.codeThemeId]);
+  }, [currentScene]);
 
   const currentSkin = useUISkinStore(s => s.skins.find(sk => sk.id === s.currentSkinId));
 
@@ -47,6 +51,21 @@ export function TopBar() {
           </svg>
           New
         </Button>
+
+        {onOpenProjects && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenProjects}
+            className="text-xs h-7"
+            title="Manage projects"
+          >
+            <svg className="w-3.5 h-3.5 mr-1" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 4h12M2 8h12M2 12h12" />
+            </svg>
+            Projects
+          </Button>
+        )}
 
         {projects.length > 1 && (
           <select

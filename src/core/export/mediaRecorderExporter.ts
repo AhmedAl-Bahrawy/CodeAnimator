@@ -7,7 +7,7 @@ export const mediaRecorderExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'MediaRecorder' in window && typeof HTMLCanvasElement.prototype.captureStream === 'function',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, playbackSpeedMultiplier } = opts;
 
     if (!this.isSupported) {
       throw new Error('MediaRecorder not supported');
@@ -56,14 +56,6 @@ export const mediaRecorderExporter: Exporter = {
 
       recorder.onerror = (e) => reject(e);
 
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          cancelled = true;
-          coordinator.cancel();
-          recorder.stop();
-        }, { once: true });
-      }
-
       // Spawn render worker
       const coordinator = new RenderCoordinator({
         width,
@@ -77,8 +69,19 @@ export const mediaRecorderExporter: Exporter = {
         windowChrome,
         typography,
         tokenLines: allTokenLines,
-        onFrameReady: () => {}, // dispatched as frames arrive
+        speedMultiplier: playbackSpeedMultiplier,
+        onFrameReady: () => {
+          /* frames arrive through nextFrame(); nothing else needed here */
+        },
       });
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          cancelled = true;
+          coordinator.cancel();
+          recorder.stop();
+        }, { once: true });
+      }
 
       coordinator.startPipeline(2);
       recorder.start();

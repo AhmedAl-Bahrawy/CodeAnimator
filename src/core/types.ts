@@ -37,11 +37,6 @@ export interface CodeToken {
   offset: number;
 }
 
-export interface CodeLine {
-  tokens: CodeToken[];
-  text: string;
-}
-
 // ====== Canvas State at time T ======
 export interface CanvasState {
   visibleText: string;
@@ -78,14 +73,6 @@ export interface TypographySettings {
 
 // ====== Aspect Ratio ======
 export type AspectRatio = '9:16' | '1:1' | '16:9' | 'custom';
-
-export interface AspectRatioPreset {
-  id: AspectRatio;
-  label: string;
-  width: number;
-  height: number;
-  maxDurationMs?: number;
-}
 
 // ====== Window Chrome ======
 export type WindowChromeStyle = 'macos' | 'windows' | 'terminal' | 'none';
@@ -270,7 +257,6 @@ export interface BrandKit {
   uiSkinId: string;
   codeThemeId: string;
   backgroundPresetId: string;
-  watermarkAssetDataUrl?: string;
   defaultAspectRatio: '9:16' | '1:1' | '16:9' | 'custom';
 }
 
@@ -285,11 +271,3 @@ export interface SnippetPreset {
   tags?: string[];
 }
 
-// ====== Shiki Types ======
-export interface HighlightedToken {
-  content: string;
-  color: string;
-  offset: number;
-  line: number;
-  col: number;
-}

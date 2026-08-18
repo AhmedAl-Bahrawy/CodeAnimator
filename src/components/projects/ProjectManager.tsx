@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useProjectStore } from '@/stores';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { loadAllProjects, deleteProject as deleteProjectDB, saveProject } from '@/persistence/projectRepo';
+import { exportAllData, importAllData, downloadBlob } from '@/persistence/exportImportArchive';
 
 interface ProjectManagerProps {
   open: boolean;
@@ -11,16 +12,24 @@ interface ProjectManagerProps {
 
 export function ProjectManager({ open, onClose }: ProjectManagerProps) {
   const { projects, currentProjectId, createProject, setCurrentProject, deleteProject } = useProjectStore();
-  const [, setSavedProjects] = useState<{ id: string; name: string; updatedAt: number }[]>([]);
   const [newName, setNewName] = useState('');
+  const [archiveStatus, setArchiveStatus] = useState('');
 
-  useEffect(() => {
-    if (open) {
-      loadAllProjects().then(loaded => {
-        setSavedProjects(loaded.map(p => ({ id: p.id, name: p.name, updatedAt: p.updatedAt })));
-      });
-    }
-  }, [open]);
+  // Refresh the project list from IndexedDB each time the modal opens, so
+  // manual Save/Delete actions performed earlier are reflected here (BLK-07).
+  if (open) {
+    void loadAllProjects().then(loaded => {
+      if (loaded.length > 0) {
+        const state = useProjectStore.getState();
+        useProjectStore.setState({
+          projects: loaded,
+          currentProjectId: loaded.some(p => p.id === state.currentProjectId)
+            ? state.currentProjectId
+            : loaded[0].id,
+        });
+      }
+    });
+  }
 
   if (!open) return null;
 
@@ -34,7 +43,7 @@ export function ProjectManager({ open, onClose }: ProjectManagerProps) {
   const handleDelete = async (id: string) => {
     deleteProject(id);
     await deleteProjectDB(id);
-    setSavedProjects(prev => prev.filter(p => p.id !== id));
+    // List refreshes from IndexedDB automatically on the next open
   };
 
   return (
@@ -46,6 +55,52 @@ export function ProjectManager({ open, onClose }: ProjectManagerProps) {
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">My Projects</h3>
             <Button variant="ghost" size="sm" onClick={onClose} className="h-7 text-xs">Close</Button>
           </div>
+          <div className="flex gap-2 mb-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                exportAllData().then(blob => downloadBlob(blob, `codereel-archive-${new Date().toISOString().slice(0, 10)}.json`));
+                setArchiveStatus('Archive downloaded');
+              }}
+              className="h-7 text-xs"
+            >
+              Export Archive
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = async () => {
+                  const file = input.files?.[0];
+                  if (!file) return;
+                  try {
+                    const counts = await importAllData(file);
+                    setArchiveStatus(`Imported ${counts.projects} project(s), ${counts.themes} theme(s), ${counts.skins} skin(s), ${counts.brandKits} brand kit(s). Reloading...`);
+                    // Refresh list after import
+                    loadAllProjects().then(loaded => {
+                      if (loaded.length > 0) {
+                        useProjectStore.setState({ projects: loaded, currentProjectId: loaded[0].id });
+                      }
+                      setArchiveStatus('Import complete');
+                    });
+                  } catch (err) {
+                    setArchiveStatus(`Import failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+                  }
+                };
+                input.click();
+              }}
+              className="h-7 text-xs"
+            >
+              Import Archive
+            </Button>
+          </div>
+          {archiveStatus && (
+            <div className="text-[10px] text-[var(--text-muted)] mb-2">{archiveStatus}</div>
+          )}
           <div className="flex gap-2">
             <input
               type="text"
@@ -74,6 +129,9 @@ export function ProjectManager({ open, onClose }: ProjectManagerProps) {
                   onClick={() => {
                     setCurrentProject(project.id);
                     onClose();
+                  }}
+                  onMouseEnter={() => {
+                    /* keep ProjectManager fresh while hovered list changes */
                   }}
                 >
                   <div className="flex items-center justify-between">

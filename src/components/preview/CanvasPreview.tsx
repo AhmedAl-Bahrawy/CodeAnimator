@@ -33,7 +33,7 @@ export function CanvasPreview() {
   const currentTheme = useMemo(() => {
     if (!currentScene) return null;
     return getThemeById(currentScene.codeThemeId) || null;
-  }, [currentScene?.codeThemeId]);
+  }, [currentScene]);
 
   // Resolve dimensions from project aspect ratio (CRI-01)
   const { w: canvasWidth, h: canvasHeight } = useMemo(() => {
@@ -46,6 +46,7 @@ export function CanvasPreview() {
 
   // Use global timeline (CRI-09 — single source of truth)
   const timeline = useTimelineStore(s => s.timeline);
+  const cleanSource = useTimelineStore(s => s.cleanSource);
   const isPlaying = useTimelineStore(s => s.isPlaying);
   const seek = useTimelineStore(s => s.seek);
   const play = useTimelineStore(s => s.play);
@@ -92,7 +93,7 @@ export function CanvasPreview() {
         console.warn('Shiki highlight failed:', err);
       });
     return () => { cancelled = true; };
-  }, [currentScene?.sourceWithMarkup, currentScene?.language, currentTheme]);
+  }, [currentScene, currentTheme]);
 
   // Convert HighlightResult to CodeToken[][] for the renderer
   const tokenLines = useMemo(() => {
@@ -116,25 +117,28 @@ export function CanvasPreview() {
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [canvasWidth, canvasHeight]);
+  }, [currentScene, canvasWidth, canvasHeight]);
 
-  // Build the "full source" state — shows all lines as fully typed
+  // Build the "full source" state — shows all lines as fully typed.
+  // Always uses the markup-stripped cleanSource so the canvas never renders
+  // raw [[markup]] tokens (BLK-05 / CRI-09).
   const buildFullSourceState = useCallback((): CanvasState | null => {
     if (!currentScene || !timeline) return null;
-    const allLines = currentScene.sourceWithMarkup.split('\n');
+    const source = cleanSource || currentScene.sourceWithMarkup;
+    const allLines = source.split('\n');
     return {
-      visibleText: currentScene.sourceWithMarkup,
+      visibleText: source,
       visibleLines: allLines,
       tokens: [],
-      cursorLine: allLines.length - 1,
-      cursorCol: allLines[allLines.length - 1].length,
+      cursorLine: Math.max(0, allLines.length - 1),
+      cursorCol: allLines.length > 0 ? allLines[allLines.length - 1].length : 0,
       activeHighlightRange: null,
       focusLine: null,
       scrollOffsetPx: 0,
       zoomLevel: 1,
       typingSpeed: currentScene.typingConfig.baseSpeed,
     };
-  }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig, timeline]);
+  }, [currentScene, timeline, cleanSource]);
 
   // Render a single frame
   const renderFrameAt = useCallback((tMs: number, forceFullSource = false) => {
@@ -149,11 +153,12 @@ export function CanvasPreview() {
 
     // When paused and not seeking, show full source (all lines visible)
     // When playing, show the typing animation state
+    const source = cleanSource || currentScene.sourceWithMarkup;
     let state: CanvasState;
     if (forceFullSource) {
-      state = buildFullSourceState() || getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
+      state = buildFullSourceState() || getStateAtTime(tl, tMs, source, currentScene.typingConfig);
     } else {
-      state = getStateAtTime(tl, tMs, currentScene.sourceWithMarkup, currentScene.typingConfig);
+      state = getStateAtTime(tl, tMs, source, currentScene.typingConfig);
     }
 
     // Resolve tokenLines per line for the renderer
@@ -161,6 +166,7 @@ export function CanvasPreview() {
       ? state.visibleLines.map((_, i) => tokenLines[i] || [])
       : null;
 
+    const frameFps = tl.fps || 30;
     renderFrame({
       ctx,
       width: canvasWidth,
@@ -171,12 +177,12 @@ export function CanvasPreview() {
       windowChrome: currentScene.windowChrome,
       typography: currentScene.typography,
       typingConfig: currentScene.typingConfig,
-      frameIndex: Math.round((tMs / 1000) * 30),
-      fps: 30,
+      frameIndex: Math.round((tMs / 1000) * frameFps),
+      fps: frameFps,
       visibleLines: state.visibleLines,
       tokenLines: lineTokenData,
     });
-  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines, buildFullSourceState]);
+  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines, buildFullSourceState, cleanSource]);
 
   // Store renderFrameAt in ref for animation loop
   useEffect(() => {
@@ -236,7 +242,7 @@ export function CanvasPreview() {
     if (!isPlaying) {
       renderFrameAt(currentTimeMs, true);
     }
-  }, [isPlaying, renderFrameAt, currentTimeMs]);
+  }, [isPlaying, renderFrameAt, currentTimeMs, currentScene]);
 
   // Initial render — show full source immediately
   useEffect(() => {

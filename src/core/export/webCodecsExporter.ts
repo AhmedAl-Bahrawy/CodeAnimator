@@ -2,7 +2,7 @@ import type { Exporter, ExportOptions, CodeToken } from '@/core/types';
 import { highlightCode } from '@/core/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
 
-async function checkCodecSupport(codec: string, width: number, height: number): Promise<boolean> {
+async function checkCodecSupport(codec: string, width: number, height: number, fps: number): Promise<boolean> {
   try {
     if (!('VideoEncoder' in window)) return false;
     const result = await VideoEncoder.isConfigSupported({
@@ -10,7 +10,7 @@ async function checkCodecSupport(codec: string, width: number, height: number): 
       width,
       height,
       bitrate: 8_000_000,
-      framerate: 30,
+      framerate: fps,
     });
     return result.supported === true;
   } catch {
@@ -23,7 +23,7 @@ export const webCodecsExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'VideoEncoder' in window,
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, format } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, format, playbackSpeedMultiplier } = opts;
 
     if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
       throw new Error('WebCodecs not supported in this browser');
@@ -39,7 +39,7 @@ export const webCodecsExporter: Exporter = {
     let mimeType: string;
 
     if (format === 'webm') {
-      if (await checkCodecSupport(webmCodec, width, height)) {
+      if (await checkCodecSupport(webmCodec, width, height, fps)) {
         codec = webmCodec;
         mimeType = 'video/webm';
       } else {
@@ -47,10 +47,10 @@ export const webCodecsExporter: Exporter = {
       }
     } else {
       // mp4 — try H.264, fall back to VP9 in WebM container
-      if (await checkCodecSupport(mp4Codec, width, height)) {
+      if (await checkCodecSupport(mp4Codec, width, height, fps)) {
         codec = mp4Codec;
         mimeType = 'video/mp4';
-      } else if (await checkCodecSupport(webmCodec, width, height)) {
+      } else if (await checkCodecSupport(webmCodec, width, height, fps)) {
         codec = webmCodec;
         mimeType = 'video/webm';
       } else {
@@ -86,6 +86,7 @@ export const webCodecsExporter: Exporter = {
       windowChrome,
       typography,
       tokenLines: allTokenLines,
+      speedMultiplier: playbackSpeedMultiplier,
     });
 
     if (signal) {

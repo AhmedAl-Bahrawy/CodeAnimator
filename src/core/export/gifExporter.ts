@@ -7,7 +7,7 @@ export const gifExporter: Exporter = {
   isSupported: typeof window !== 'undefined',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, playbackSpeedMultiplier } = opts;
 
     // Pre-compute Shiki tokens on main thread
     let allTokenLines: CodeToken[][] | null = null;
@@ -22,7 +22,8 @@ export const gifExporter: Exporter = {
 
     // GIF at reduced fps for reasonable file size
     const gifFps = Math.min(fps, 15);
-    const totalFrames = Math.ceil((timeline.totalDurationMs / 1000) * gifFps);
+    const effectiveMultiplier = Math.max(0.1, playbackSpeedMultiplier ?? 1);
+    const totalFrames = Math.ceil((timeline.totalDurationMs / 1000) * gifFps * effectiveMultiplier);
     // Scale down for GIF to keep file size manageable
     const scale = Math.min(1, 640 / Math.max(width, height));
     const gw = Math.round(width * scale);
@@ -54,14 +55,6 @@ export const gifExporter: Exporter = {
 
       recorder.onerror = (e) => reject(e);
 
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          cancelled = true;
-          coordinator.cancel();
-          recorder.stop();
-        }, { once: true });
-      }
-
       // Spawn render worker at scaled dimensions
       const coordinator = new RenderCoordinator({
         width: gw,
@@ -75,8 +68,19 @@ export const gifExporter: Exporter = {
         windowChrome,
         typography,
         tokenLines: allTokenLines,
-        onFrameReady: () => {},
+        speedMultiplier: playbackSpeedMultiplier,
+        onFrameReady: () => {
+          /* frames arrive through nextFrame(); nothing else needed here */
+        },
       });
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          cancelled = true;
+          coordinator.cancel();
+          recorder.stop();
+        }, { once: true });
+      }
 
       coordinator.startPipeline(2);
       recorder.start();

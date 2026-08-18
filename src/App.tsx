@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState } from 'react';
 import { AppShell } from './app/AppShell';
+import { TopBar } from './app/TopBar';
 import { CodeInput } from './components/editor/CodeInput';
 import { LanguagePicker } from './components/editor/LanguagePicker';
 import { CanvasPreview } from './components/preview/CanvasPreview';
@@ -10,7 +11,7 @@ import { TypingBehaviorControls } from './components/style/TypingBehaviorControl
 import { TypographyControls } from './components/style/TypographyControls';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
-import { useProjectStore, useTimelineStore, useUISkinStore } from './stores';
+import { useProjectStore, useTimelineStore, useUISkinStore, useThemeStore } from './stores';
 import { buildTimelineFromSource } from './core/timeline';
 import { parseMarkup } from './core/markup/parser';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
@@ -60,6 +61,10 @@ function App() {
             currentProjectId: saved[0].id,
             currentSceneIndex: 0,
           });
+          // Restore custom UI skins and code themes persisted in IndexedDB (BLK-08)
+          await useUISkinStore.getState().loadCustomSkins();
+          await useThemeStore.getState().loadCustomThemes();
+
           // Restore UI skin from localStorage
           const savedSkinId = localStorage.getItem('codereel-skin-id');
           if (savedSkinId) {
@@ -102,7 +107,7 @@ function App() {
       fps: 30,
       markupEvents,
     });
-    setTimeline(timeline);
+    setTimeline(timeline, cleanSource);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig, setTimeline]);
 
@@ -167,7 +172,7 @@ function App() {
   }
 
   return (
-    <AppShell>
+    <AppShell topBar={<TopBar onOpenProjects={() => setShowProjectManager(true)} />}>
       {/* Desktop layout */}
       <div className="hidden md:flex h-full">
         {/* Left panel - Editor */}

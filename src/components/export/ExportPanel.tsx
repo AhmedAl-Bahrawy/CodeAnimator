@@ -33,7 +33,7 @@ export function ExportPanel() {
     detectBestTier,
   } = useExportStore();
 
-  const [selectedPreset, setSelectedPreset] = useState('youtube-shorts');
+  const [selectedPreset, setSelectedPreset] = useState('project-default');
   const [exportStatus, setExportStatus] = useState('');
   const [exportError, setExportError] = useState('');
 
@@ -47,18 +47,36 @@ export function ExportPanel() {
   const sceneTheme = useMemo(() => {
     if (!currentScene) return null;
     return getThemeById(currentScene.codeThemeId) || null;
-  }, [currentScene?.codeThemeId]);
+  }, [currentScene]);
 
   // Resolve dimensions from project aspect ratio (CRI-08)
   const projectDimensions = useMemo(() => {
     if (!currentProject) return { w: 1080, h: 1920 };
     return resolveExportDimensions(currentProject.aspectRatio, currentProject.customWidth, currentProject.customHeight);
-  }, [currentProject?.aspectRatio, currentProject?.customWidth, currentProject?.customHeight]);
+  }, [currentProject]);
 
-  // Override dimensions from platform preset if one is explicitly selected
+  // Override dimensions from platform preset only when a real preset is
+  // selected — "project-default" respects the project's own aspect ratio (BLK-04).
   const selectedPresetData = platformPresets.find(p => p.id === selectedPreset);
-  const exportWidth = selectedPresetData?.width || projectDimensions.w;
-  const exportHeight = selectedPresetData?.height || projectDimensions.h;
+  const exportWidth = selectedPresetData ? selectedPresetData.width : projectDimensions.w;
+  const exportHeight = selectedPresetData ? selectedPresetData.height : projectDimensions.h;
+
+  // Warn when the timeline exceeds the selected platform's max duration.
+  const durationWarning = useMemo(() => {
+    if (selectedPresetData && selectedPresetData.maxDurationMs < Infinity && currentProject) {
+      const { cleanSource, events } = parseMarkup(currentScene?.sourceWithMarkup || '');
+      const tl = buildTimelineFromSource({
+        source: cleanSource,
+        typingConfig: currentScene?.typingConfig || { mode: 'character' as const, baseSpeed: 40, cursorStyle: 'bar' as const, cursorBlinkRate: 1, autoScroll: true },
+        fps,
+        markupEvents: events,
+      });
+      if (tl.totalDurationMs > selectedPresetData.maxDurationMs) {
+        return `This timeline (~${Math.round(tl.totalDurationMs / 1000)}s) exceeds the ${selectedPresetData.label} limit of ${selectedPresetData.maxDurationMs / 1000}s.`;
+      }
+    }
+    return '';
+  }, [selectedPresetData, fps, currentProject, currentScene]);
 
   const handleExport = async () => {
     if (!currentScene || !sceneTheme) return;
@@ -95,6 +113,13 @@ export function ExportPanel() {
         return;
       }
 
+      if (durationWarning) {
+        setExportStatus('Export not started');
+        setExportError(durationWarning);
+        finishExport();
+        return;
+      }
+
       setExportStatus(`Exporting via ${exporter.tierName}...`);
 
       const background = getBackgroundById(currentScene.backgroundPresetId);
@@ -124,7 +149,8 @@ export function ExportPanel() {
       a.href = url;
       // BLK-02: Use correct file extension based on actual blob MIME type
       const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('gif') ? 'gif' : format;
-      a.download = `codereel-export.${ext}`;
+      const filename = selectedPresetData ? `codereel-${selectedPresetData.id}.${ext}` : `codereel-export.${ext}`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -164,6 +190,7 @@ export function ExportPanel() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="project-default">Project Default ({projectDimensions.w}x{projectDimensions.h})</SelectItem>
             {platformPresets.map((preset) => (
               <SelectItem key={preset.id} value={preset.id}>
                 {preset.label} ({preset.width}x{preset.height})
@@ -173,8 +200,11 @@ export function ExportPanel() {
         </Select>
         <div className="text-[10px] text-[var(--text-muted)]">
           Output: {exportWidth}x{exportHeight}px
-          {currentProject?.aspectRatio !== 'custom' && ` (${currentProject?.aspectRatio || '9:16'})`}
+          {selectedPreset === 'project-default' && currentProject?.aspectRatio !== 'custom' && ` (${currentProject?.aspectRatio || '9:16'})`}
         </div>
+        {durationWarning && (
+          <div className="text-[10px] text-[var(--warning)]">{durationWarning}</div>
+        )}
       </div>
 
       <Separator />
@@ -196,8 +226,7 @@ export function ExportPanel() {
           ))}
         </div>
         <div className="text-[10px] text-[var(--text-muted)]">
-          {format === 'gif' && 'Note: GIF output uses WebM container for compatibility. Rename to .webm if needed.'}
-          {format === 'mp4' && bestTier !== 'webcodecs' && 'Note: MP4 fallback to WebM via MediaRecorder.'}
+          {format === 'mp4' && bestTier !== 'webcodecs' && 'Note: MP4 fallback to WebM via MediaRecorder in this browser.'}
         </div>
       </div>
 

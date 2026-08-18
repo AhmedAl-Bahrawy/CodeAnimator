@@ -219,7 +219,7 @@ export function CodeInput({ value, onChange, language = 'javascript', codeThemeI
       view.destroy();
       viewRef.current = null;
     };
-  }, [language, highlightStyle]); // Re-create on language or theme change; value sync is handled by separate effect
+  }, [getLanguage, highlightStyle, value]); // Re-create on language or theme change; value sync is handled by separate effect
 
   // Sync external value changes
   useEffect(() => {
