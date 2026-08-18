@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 1632, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1633, height: 756 } });
 const errors = [];
 page.on('console', message => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); });
 page.on('pageerror', error => errors.push(`page: ${error.message}`));
@@ -27,9 +27,11 @@ const result = await page.evaluate(() => {
       if (image[i] + image[i + 1] + image[i + 2] > 500) bright += 1;
     }
   }
+  const rect = canvas?.getBoundingClientRect();
   return {
     editorText: cm?.textContent || '',
     canvasSize: canvas ? [canvas.width, canvas.height] : [],
+    canvasRect: rect ? { top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height } : null,
     nonBackground,
     bright,
     center: canvas && ctx ? Array.from(ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data) : [],
@@ -37,4 +39,11 @@ const result = await page.evaluate(() => {
 });
 console.log(JSON.stringify({ result, errors }, null, 2));
 await browser.close();
-if (errors.length || !result.editorText.includes('visibleOnCanvas') || result.bright === 0) process.exit(1);
+if (
+  errors.length ||
+  !result.editorText.includes('visibleOnCanvas') ||
+  result.bright === 0 ||
+  !result.canvasRect ||
+  result.canvasRect.top < 0 ||
+  result.canvasRect.bottom > 756
+) process.exit(1);

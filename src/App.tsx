@@ -194,7 +194,7 @@ function App() {
       {/* Desktop layout */}
       <div className="hidden md:flex h-full">
         {/* Left panel - Editor */}
-        <div className="w-[380px] flex flex-col border-r border-[var(--border)] bg-[var(--bg-elevated)] shrink-0">
+        <div className="w-[380px] flex flex-col min-h-0 border-r border-[var(--border)] bg-[var(--bg-elevated)] shrink-0">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]">
             <LanguagePicker
               value={currentScene.language}
@@ -223,8 +223,8 @@ function App() {
         </div>
 
         {/* Center - Preview */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex-1 p-4">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="flex-1 min-h-0 p-4">
             <CanvasPreview />
           </div>
         </div>

@@ -238,8 +238,8 @@ export function CanvasPreview() {
   };
 
   return (
-    <div className="flex flex-col h-full gap-3">
-      <div ref={containerRef} className="flex-1 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 gap-3">
+      <div ref={containerRef} className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden">
         <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
           <canvas
             ref={canvasRef}
