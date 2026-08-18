@@ -1,20 +1,10 @@
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { useProjectStore, useTimelineStore } from '@/stores';
+import { useProjectStore, useTimelineStore, useUISkinStore } from '@/stores';
 import { renderFrame } from '@/core/render/renderFrame';
 import { getStateAtTime } from '@/core/timeline/getStateAtTime';
-import { getBackgroundById } from '@/data/backgroundPresets';
-import { getThemeById } from '@/data/codeThemes';
+import { resolveSceneRenderModel } from '@/core/render/sceneModel';
 import { highlightCode, type HighlightResult } from '@/core/highlighting/shiki';
-import { aspectRatioPresets } from '@/data/platformPresets';
-import type { Timeline, CanvasState, CodeToken, AspectRatio } from '@/core/types';
-
-function resolveDimensions(aspectRatio: AspectRatio, customWidth?: number, customHeight?: number): { w: number; h: number } {
-  if (aspectRatio === 'custom' && customWidth && customHeight) {
-    return { w: customWidth, h: customHeight };
-  }
-  const preset = aspectRatioPresets.find(p => p.id === aspectRatio);
-  return { w: preset?.width ?? 1080, h: preset?.height ?? 1920 };
-}
+import type { Timeline, CanvasState, CodeToken } from '@/core/types';
 
 export function CanvasPreview() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -23,203 +13,171 @@ export function CanvasPreview() {
   const [scale, setScale] = useState(0.3);
   const highlightCacheRef = useRef<Map<string, HighlightResult>>(new Map());
 
-  const currentProject = useProjectStore(s => {
-    return s.projects.find(p => p.id === s.currentProjectId) || null;
-  });
-  const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
-  const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
+  const currentProject = useProjectStore((state) =>
+    state.projects.find((project) => project.id === state.currentProjectId) || null,
+  );
+  const currentSceneIndex = useProjectStore((state) => state.currentSceneIndex);
+  const currentScene = currentProject?.scenes[currentSceneIndex] || null;
+  const skins = useUISkinStore((state) => state.skins);
+  const currentSkinId = useUISkinStore((state) => state.currentSkinId);
+  const currentSkin = useMemo(
+    () => skins.find((skin) => skin.id === currentSkinId) || skins[0],
+    [skins, currentSkinId],
+  );
 
-  // Resolve theme from scene codeThemeId (BLK-06)
-  const currentTheme = useMemo(() => {
-    if (!currentScene) return null;
-    return getThemeById(currentScene.codeThemeId) || null;
-  }, [currentScene]);
+  const storedTimeline = useTimelineStore((state) => state.timeline);
+  const cleanSource = useTimelineStore((state) => state.cleanSource);
+  const isPlaying = useTimelineStore((state) => state.isPlaying);
+  const currentTimeMs = useTimelineStore((state) => state.currentTimeMs);
+  const seek = useTimelineStore((state) => state.seek);
+  const play = useTimelineStore((state) => state.play);
+  const pause = useTimelineStore((state) => state.pause);
 
-  // Resolve dimensions from project aspect ratio (CRI-01)
-  const { w: canvasWidth, h: canvasHeight } = useMemo(() => {
-    return resolveDimensions(
-      currentProject?.aspectRatio ?? '9:16',
-      currentProject?.customWidth,
-      currentProject?.customHeight
-    );
-  }, [currentProject?.aspectRatio, currentProject?.customWidth, currentProject?.customHeight]);
+  const sceneModel = useMemo(() => {
+    if (!currentProject || !currentScene || !currentSkin) return null;
+    return resolveSceneRenderModel(currentProject, currentScene, {
+      skin: currentSkin,
+      fps: storedTimeline?.fps === 60 ? 60 : 30,
+    });
+  }, [currentProject, currentScene, currentSkin, storedTimeline?.fps]);
 
-  // Use global timeline (CRI-09 — single source of truth)
-  const timeline = useTimelineStore(s => s.timeline);
-  const cleanSource = useTimelineStore(s => s.cleanSource);
-  const isPlaying = useTimelineStore(s => s.isPlaying);
-  const seek = useTimelineStore(s => s.seek);
-  const play = useTimelineStore(s => s.play);
-  const pause = useTimelineStore(s => s.pause);
+  const timeline = storedTimeline || sceneModel?.timeline || null;
+  const source = sceneModel?.source || cleanSource;
+  const canvasWidth = sceneModel?.width || 1080;
+  const canvasHeight = sceneModel?.height || 1920;
 
-  // Keep refs for the animation loop to avoid stale closures
   const isPlayingRef = useRef(false);
   const currentTimeRef = useRef(0);
   const timelineRef = useRef<Timeline | null>(null);
-  const renderFnRef = useRef<((tMs: number, forceFullSource?: boolean) => void) | null>(null);
+  const renderFnRef = useRef<((timeMs: number, forceFullSource?: boolean) => void) | null>(null);
 
-  // Sync refs outside render
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
   useEffect(() => {
-    currentTimeRef.current = useTimelineStore.getState().currentTimeMs;
-  });
+    currentTimeRef.current = currentTimeMs;
+  }, [currentTimeMs]);
   useEffect(() => {
     timelineRef.current = timeline;
   }, [timeline]);
 
-  // Shiki highlight cache
   const [highlightResult, setHighlightResult] = useState<HighlightResult | null>(null);
   useEffect(() => {
-    if (!currentScene || !currentTheme) return;
-    const cache = highlightCacheRef.current;
-    const cacheKey = `${currentScene.language}:${currentTheme.shikiTheme || currentTheme.id}:${currentScene.sourceWithMarkup}`;
-    const cached = cache.get(cacheKey);
+    if (!sceneModel) return;
+    const cacheKey = `${sceneModel.language}:${sceneModel.theme.shikiTheme || sceneModel.theme.id}:${sceneModel.source}`;
+    const cached = highlightCacheRef.current.get(cacheKey);
     if (cached) {
       setHighlightResult(cached);
       return;
     }
-    // Clear stale tokens immediately so canvas shows plain text while loading
-    setHighlightResult(null);
+
     let cancelled = false;
-    highlightCode(currentScene.sourceWithMarkup, currentScene.language, currentTheme.shikiTheme || 'dracula')
-      .then(result => {
+    void highlightCode(sceneModel.source, sceneModel.language, sceneModel.theme.shikiTheme || 'dracula')
+      .then((result) => {
         if (cancelled) return;
-        cache.set(cacheKey, result);
+        highlightCacheRef.current.set(cacheKey, result);
         setHighlightResult(result);
       })
-      .catch((err) => {
-        console.warn('Shiki highlight failed:', err);
+      .catch((error) => {
+        if (!cancelled) console.warn('Syntax highlighting failed:', error);
       });
-    return () => { cancelled = true; };
-  }, [currentScene, currentTheme]);
+    return () => {
+      cancelled = true;
+    };
+  }, [sceneModel]);
 
-  // Convert HighlightResult to CodeToken[][] for the renderer
-  const tokenLines = useMemo(() => {
+  const tokenLines = useMemo<CodeToken[][] | null>(() => {
     if (!highlightResult) return null;
-    return highlightResult.lines.map(line =>
-      line.tokens.map(t => ({ content: t.content, color: t.color, offset: t.offset }))
+    return highlightResult.lines.map((line) =>
+      line.tokens.map((token) => ({ content: token.content, color: token.color, offset: token.offset })),
     );
   }, [highlightResult]);
 
-  // Scale observer
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width === 0 || height === 0) continue;
-        const scaleX = width / canvasWidth;
-        const scaleY = height / canvasHeight;
-        setScale(Math.min(scaleX, scaleY));
-      }
+      const { width, height } = entries[0]?.contentRect || {};
+      if (!width || !height) return;
+      setScale(Math.min(width / canvasWidth, height / canvasHeight));
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [currentScene, canvasWidth, canvasHeight]);
+  }, [canvasWidth, canvasHeight]);
 
-  // Build the "full source" state — shows all lines as fully typed.
-  // Always uses the markup-stripped cleanSource so the canvas never renders
-  // raw [[markup]] tokens (BLK-05 / CRI-09).
   const buildFullSourceState = useCallback((): CanvasState | null => {
-    if (!currentScene || !timeline) return null;
-    const source = cleanSource || currentScene.sourceWithMarkup;
+    if (!sceneModel || !timeline) return null;
     const allLines = source.split('\n');
     return {
       visibleText: source,
       visibleLines: allLines,
       tokens: [],
       cursorLine: Math.max(0, allLines.length - 1),
-      cursorCol: allLines.length > 0 ? allLines[allLines.length - 1].length : 0,
+      cursorCol: allLines.at(-1)?.length || 0,
       activeHighlightRange: null,
       focusLine: null,
       scrollOffsetPx: 0,
       zoomLevel: 1,
-      typingSpeed: currentScene.typingConfig.baseSpeed,
+      typingSpeed: sceneModel.typingConfig.baseSpeed,
     };
-  }, [currentScene, timeline, cleanSource]);
+  }, [sceneModel, timeline, source]);
 
-  // Render a single frame
-  const renderFrameAt = useCallback((tMs: number, forceFullSource = false) => {
+  const renderFrameAt = useCallback((timeMs: number, forceFullSource = false) => {
     const canvas = canvasRef.current;
-    if (!canvas || !currentScene || !currentTheme) return;
+    const model = sceneModel;
     const tl = timelineRef.current;
-    if (!tl) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!canvas || !model || !tl || !currentSkin) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
 
-    const background = getBackgroundById(currentScene.backgroundPresetId);
-
-    // When paused and not seeking, show full source (all lines visible)
-    // When playing, show the typing animation state
-    const source = cleanSource || currentScene.sourceWithMarkup;
-    let state: CanvasState;
-    if (forceFullSource) {
-      state = buildFullSourceState() || getStateAtTime(tl, tMs, source, currentScene.typingConfig);
-    } else {
-      state = getStateAtTime(tl, tMs, source, currentScene.typingConfig);
-    }
-
-    // Resolve tokenLines per line for the renderer
-    const lineTokenData: CodeToken[][] | null = tokenLines
-      ? state.visibleLines.map((_, i) => tokenLines[i] || [])
+    const state = forceFullSource
+      ? buildFullSourceState() || getStateAtTime(tl, timeMs, model.source, model.typingConfig)
+      : getStateAtTime(tl, timeMs, model.source, model.typingConfig);
+    const visibleTokenLines = tokenLines
+      ? state.visibleLines.map((_, index) => tokenLines[index] || [])
       : null;
 
-    const frameFps = tl.fps || 30;
     renderFrame({
-      ctx,
-      width: canvasWidth,
-      height: canvasHeight,
+      ctx: context,
+      width: model.width,
+      height: model.height,
       state,
-      theme: currentTheme,
-      background,
-      windowChrome: currentScene.windowChrome,
-      typography: currentScene.typography,
-      typingConfig: currentScene.typingConfig,
-      frameIndex: Math.round((tMs / 1000) * frameFps),
-      fps: frameFps,
+      theme: model.theme,
+      background: model.background,
+      windowChrome: model.windowChrome,
+      typography: model.typography,
+      typingConfig: model.typingConfig,
+      skin: model.skin,
+      appearance: model.appearance,
+      frameIndex: Math.round((timeMs / 1000) * (tl.fps || 30)),
+      fps: tl.fps || 30,
       visibleLines: state.visibleLines,
-      tokenLines: lineTokenData,
+      tokenLines: visibleTokenLines,
     });
-  }, [currentScene, currentTheme, canvasWidth, canvasHeight, tokenLines, buildFullSourceState, cleanSource]);
+  }, [sceneModel, currentSkin, tokenLines, buildFullSourceState]);
 
-  // Store renderFrameAt in ref for animation loop
   useEffect(() => {
     renderFnRef.current = renderFrameAt;
   }, [renderFrameAt]);
 
-  // Animation loop — no global state updates per frame (CRI-05)
   useEffect(() => {
-    if (!isPlaying || !timeline) return;
-
+    if (!isPlaying || !timeline || timeline.totalDurationMs <= 0) return;
     const totalDuration = timeline.totalDurationMs;
     let startTimestamp: number | null = null;
     const startOffset = currentTimeRef.current;
 
     const animate = (timestamp: number) => {
-      if (!startTimestamp) startTimestamp = timestamp;
+      if (startTimestamp === null) startTimestamp = timestamp;
       const elapsed = timestamp - startTimestamp;
-      const newTime = (startOffset + elapsed) % totalDuration;
-      currentTimeRef.current = newTime;
-
-      // Draw directly to canvas without global state update
-      // During animation, render the typing state (not full source)
-      renderFnRef.current?.(newTime, false);
-
-      if (isPlayingRef.current) {
-        animationRef.current = requestAnimationFrame(animate);
-      }
+      const nextTime = (startOffset + elapsed) % totalDuration;
+      currentTimeRef.current = nextTime;
+      renderFnRef.current?.(nextTime, false);
+      if (isPlayingRef.current) animationRef.current = requestAnimationFrame(animate);
     };
 
     animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    };
+    return () => cancelAnimationFrame(animationRef.current);
   }, [isPlaying, timeline]);
 
-  // Throttled UI progress sync (update global state at 20Hz, not 60Hz)
   useEffect(() => {
     if (!isPlaying) return;
     let rafId = 0;
@@ -236,15 +194,10 @@ export function CanvasPreview() {
     return () => cancelAnimationFrame(rafId);
   }, [isPlaying, seek]);
 
-  // Render when paused — show full source (all lines visible)
-  const currentTimeMs = useTimelineStore(s => s.currentTimeMs);
   useEffect(() => {
-    if (!isPlaying) {
-      renderFrameAt(currentTimeMs, true);
-    }
-  }, [isPlaying, renderFrameAt, currentTimeMs, currentScene]);
+    if (!isPlaying) renderFrameAt(currentTimeMs, true);
+  }, [isPlaying, currentTimeMs, renderFrameAt]);
 
-  // Initial render — show full source immediately
   useEffect(() => {
     renderFrameAt(0, true);
   }, [renderFrameAt]);
@@ -253,27 +206,16 @@ export function CanvasPreview() {
     if (isPlaying) {
       pause();
       cancelAnimationFrame(animationRef.current);
-    } else {
-      const tl = timelineRef.current;
-      if (tl && currentTimeMs >= tl.totalDurationMs - 100) {
-        seek(0);
-      }
-      play();
+      return;
     }
+    if (timeline && currentTimeMs >= timeline.totalDurationMs - 100) seek(0);
+    play();
   };
 
   return (
     <div className="flex flex-col h-full gap-3">
-      <div
-        ref={containerRef}
-        className="flex-1 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden"
-      >
-        <div
-          style={{
-            transform: `scale(${scale})`,
-            transformOrigin: 'center center',
-          }}
-        >
+      <div ref={containerRef} className="flex-1 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden">
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
           <canvas
             ref={canvasRef}
             width={canvasWidth}
@@ -283,38 +225,31 @@ export function CanvasPreview() {
           />
         </div>
       </div>
-
       <div className="flex items-center gap-3 px-2">
         <button
           onClick={togglePlayPause}
           className="w-10 h-10 rounded-full bg-[var(--accent)] text-[var(--accent-foreground)] flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+          aria-label={isPlaying ? 'Pause preview' : 'Play preview'}
         >
           {isPlaying ? (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="3" y="2" width="4" height="12" rx="1" />
-              <rect x="9" y="2" width="4" height="12" rx="1" />
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1" /><rect x="9" y="2" width="4" height="12" rx="1" /></svg>
           ) : (
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4 2l10 6-10 6V2z" />
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z" /></svg>
           )}
         </button>
-
         <input
           type="range"
           min={0}
           max={timeline?.totalDurationMs || 1}
           value={currentTimeMs}
-          onChange={(e) => {
-            const t = Number(e.target.value);
-            seek(t);
-            // When seeking while paused, show the animated state at that time
-            renderFrameAt(t, false);
+          onChange={(event) => {
+            const time = Number(event.target.value);
+            seek(time);
+            renderFrameAt(time, false);
           }}
+          aria-label="Preview timeline"
           className="flex-1 h-1.5 rounded-full appearance-none bg-[var(--bg-surface)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--accent)] [&::-webkit-slider-thumb]:cursor-pointer"
         />
-
         <span className="text-xs text-[var(--text-muted)] font-mono min-w-[80px] text-right">
           {formatTime(currentTimeMs)} / {formatTime(timeline?.totalDurationMs || 0)}
         </span>
@@ -324,8 +259,6 @@ export function CanvasPreview() {
 }
 
 function formatTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  const totalSeconds = Math.floor(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${(totalSeconds % 60).toString().padStart(2, '0')}`;
 }

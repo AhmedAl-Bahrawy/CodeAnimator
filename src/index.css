@@ -101,39 +101,4 @@ body {
 
 .cm-editor {
   height: 100%;
-  font-family: var(--font-mono) !important;
-  font-size: 14px;
-  background: var(--bg-base) !important;
-}
-
-.cm-editor .cm-content {
-  font-family: var(--font-mono) !important;
-}
-
-.cm-editor .cm-gutters {
-  background: var(--bg-elevated) !important;
-  border-right: 1px solid var(--border) !important;
-  color: var(--text-muted);
-}
-
-.cm-editor .cm-activeLineGutter {
-  background: var(--bg-panel) !important;
-  color: var(--text-secondary);
-}
-
-.cm-editor .cm-activeLine {
-  background: var(--bg-panel) !important;
-}
-
-.cm-editor .cm-selectionBackground {
-  background: rgba(99, 102, 241, 0.2) !important;
-}
-
-.cm-editor .cm-cursor {
-  border-left-color: var(--accent) !important;
-}
-
-.cm-editor .cm-matchingBracket {
-  background: rgba(99, 102, 241, 0.3) !important;
-  color: var(--text-primary) !important;
 }

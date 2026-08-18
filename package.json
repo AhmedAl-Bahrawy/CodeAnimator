@@ -40,11 +40,15 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.4.5",
+    "gifenc": "^1.0.3",
+    "h264-mp4-encoder": "^1.0.12",
     "lucide-react": "^1.31.0",
+    "mp4-muxer": "^5.2.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "shiki": "^4.4.3",
     "tailwind-merge": "^3.6.0",
+    "webm-muxer": "^5.1.4",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

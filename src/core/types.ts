@@ -181,6 +181,8 @@ export interface ExportOptions {
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
+  skin: UISkin;
+  appearance: SceneAppearance;
   width: number;
   height: number;
   fps: 30 | 60;
@@ -204,6 +206,29 @@ export interface PlatformPreset {
   maxDurationMs: number;
 }
 
+// ====== Canonical Resolved Appearance ======
+// This is the final visual contract after Style, Skin, and Code Theme have been
+// resolved. Browser editor CSS and canvas/export rendering must consume these
+// exact values instead of independently reconstructing them.
+export interface SceneAppearance {
+  codeBackground: string;
+  codeForeground: string;
+  gutterBackground: string;
+  gutterForeground: string;
+  activeLineBackground: string;
+  border: string;
+  cursorColor: string;
+  selectionColor: string;
+  accent: string;
+  monoFontFamily: string;
+  fontSizePx: number;
+  lineHeightPx: number;
+  letterSpacingPx: number;
+  contentPaddingPx: number;
+  gutterWidthPx: number;
+  titleBarHeightPx: number;
+}
+
 // ====== Rendering Layer Types ======
 export interface RenderContext {
   ctx: CanvasRenderingContext2D;
@@ -215,6 +240,8 @@ export interface RenderContext {
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
   typingConfig: TypingConfig;
+  skin: UISkin;
+  appearance: SceneAppearance;
   frameIndex: number;
   fps: number;
 }

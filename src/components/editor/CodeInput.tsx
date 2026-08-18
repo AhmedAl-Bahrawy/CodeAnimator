@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Compartment } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -11,115 +11,111 @@ import { tags } from '@lezer/highlight';
 import { bracketMatching } from '@codemirror/language';
 import { closeBrackets } from '@codemirror/autocomplete';
 import { getThemeById } from '@/data/codeThemes';
-import type { CodeTheme } from '@/core/types';
+import type { CodeTheme, TypographySettings, UISkin, SceneAppearance } from '@/core/types';
 
-// Dark theme matching our app
-const codereelTheme = EditorView.theme({
-  '&': {
-    backgroundColor: 'var(--bg-elevated)',
-    color: 'var(--text-primary)',
-    fontSize: '14px',
-    fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
-    height: '100%',
-  },
-  '.cm-content': {
-    caretColor: 'var(--accent)',
-    padding: '12px 0',
-  },
-  '.cm-cursor, .cm-dropCursor': {
-    borderLeftColor: 'var(--accent)',
-    borderLeftWidth: '2px',
-  },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-    backgroundColor: 'var(--accent)22',
-  },
-  '.cm-activeLine': {
-    backgroundColor: 'var(--bg-surface)',
-  },
-  '.cm-gutters': {
-    backgroundColor: 'var(--bg-elevated)',
-    color: 'var(--text-muted)',
-    border: 'none',
-    borderRight: '1px solid var(--border)',
-  },
-  '.cm-activeLineGutter': {
-    backgroundColor: 'var(--bg-surface)',
-    color: 'var(--text-secondary)',
-  },
-  '.cm-lineNumbers .cm-gutterElement': {
-    padding: '0 8px 0 12px',
-    minWidth: '32px',
-  },
-  '.cm-scroller': {
-    overflow: 'auto',
-  },
-  '.cm-matchingBracket': {
-    backgroundColor: 'var(--accent)33',
-    outline: '1px solid var(--accent)',
-  },
-}, { dark: true });
+function buildEditorTheme(
+  theme: CodeTheme | null,
+  skin: UISkin,
+  typography: TypographySettings,
+  appearance?: SceneAppearance,
+): ReturnType<typeof EditorView.theme> {
+  const t = skin.tokens;
+  const codeBackground = appearance?.codeBackground || theme?.background || t.bgElevated;
+  const foreground = appearance?.codeForeground || theme?.foreground || t.textPrimary;
+  const mono = appearance?.monoFontFamily || typography.fontFamily || t.fontMono;
+  const fontSize = `${appearance?.fontSizePx || Math.max(8, typography.fontSize)}px`;
+  const lineHeight = appearance ? `${appearance.lineHeightPx}px` : `${Math.max(1, typography.lineHeight)}em`;
+  const cursorColor = appearance?.cursorColor || theme?.cursorColor || t.accent;
+  const selectionColor = appearance?.selectionColor || theme?.selectionColor || `${t.accent}33`;
 
-// Syntax highlighting theme
-const codereelHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: '#c678dd' },
-  { tag: tags.operator, color: '#56b6c2' },
-  { tag: tags.special(tags.variableName), color: '#e06c75' },
-  { tag: tags.typeName, color: '#e5c07b' },
-  { tag: tags.atom, color: '#d19a66' },
-  { tag: tags.number, color: '#d19a66' },
-  { tag: tags.definition(tags.variableName), color: '#61afef' },
-  { tag: tags.string, color: '#98c379' },
-  { tag: tags.special(tags.string), color: '#56b6c2' },
-  { tag: tags.comment, color: '#5c6370', fontStyle: 'italic' },
-  { tag: tags.variableName, color: '#e06c75' },
-  { tag: tags.tagName, color: '#e06c75' },
-  { tag: tags.propertyName, color: '#61afef' },
-  { tag: tags.attributeName, color: '#d19a66' },
-  { tag: tags.className, color: '#e5c07b' },
-  { tag: tags.labelName, color: '#61afef' },
-  { tag: tags.namespace, color: '#e06c75' },
-  { tag: tags.macroName, color: '#e06c75' },
-  { tag: tags.literal, color: '#56b6c2' },
-  { tag: tags.separator, color: '#abb2bf' },
-  { tag: tags.function(tags.variableName), color: '#61afef' },
-  { tag: tags.function(tags.propertyName), color: '#61afef' },
-  { tag: tags.url, color: '#56b6c2', textDecoration: 'underline' },
-  { tag: tags.regexp, color: '#98c379' },
-  { tag: tags.escape, color: '#56b6c2' },
-  { tag: tags.meta, color: '#abb2bf' },
-  { tag: tags.invalid, color: '#ffffff', backgroundColor: '#e06c75' },
-]);
+  return EditorView.theme({
+    '&': {
+      backgroundColor: codeBackground,
+      color: foreground,
+      fontSize,
+      fontFamily: mono,
+      lineHeight,
+      height: '100%',
+    },
+    '.cm-content': {
+      caretColor: cursorColor,
+      padding: `${appearance?.contentPaddingPx ?? 12}px 0`,
+      fontFamily: mono,
+      letterSpacing: `${appearance?.letterSpacingPx ?? typography.letterSpacing ?? 0}px`,
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: cursorColor,
+      borderLeftWidth: '2px',
+    },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+      backgroundColor: selectionColor,
+    },
+    '.cm-activeLine': {
+      backgroundColor: appearance?.activeLineBackground || t.bgPanel,
+    },
+    '.cm-gutters': {
+      backgroundColor: appearance?.gutterBackground || codeBackground,
+      color: appearance?.gutterForeground || theme?.lineNumberColor || t.textMuted,
+      border: 'none',
+      borderRight: `1px solid ${appearance?.border || t.border}`,
+      fontFamily: mono,
+      minWidth: `${appearance?.gutterWidthPx || 32}px`,
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: appearance?.activeLineBackground || t.bgPanel,
+      color: appearance?.gutterForeground || t.textSecondary,
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      padding: '0 10px 0 12px',
+      minWidth: `${appearance?.gutterWidthPx || 32}px`,
+    },
+    '.cm-scroller': {
+      overflow: 'auto',
+    },
+    '.cm-matchingBracket': {
+      backgroundColor: selectionColor,
+      outline: `1px solid ${cursorColor}`,
+    },
+  }, { dark: true });
+}
 
-function buildHighlightStyleFromTheme(theme: CodeTheme): HighlightStyle {
-  const a = theme.ansi;
+function buildHighlightStyleFromTheme(theme: CodeTheme | null): HighlightStyle {
+  const a = theme?.ansi;
+  const fallback = {
+    black: '#000000', red: '#e06c75', green: '#98c379', yellow: '#e5c07b', blue: '#61afef',
+    magenta: '#c678dd', cyan: '#56b6c2', white: '#abb2bf', brightBlack: '#5c6370',
+    brightRed: '#e06c75', brightGreen: '#98c379', brightYellow: '#e5c07b', brightBlue: '#61afef',
+    brightMagenta: '#c678dd', brightCyan: '#56b6c2', brightWhite: '#ffffff',
+  };
+  const colors = a || fallback;
   return HighlightStyle.define([
-    { tag: tags.keyword, color: a.magenta },
-    { tag: tags.operator, color: a.cyan },
-    { tag: tags.special(tags.variableName), color: a.red },
-    { tag: tags.variableName, color: a.red },
-    { tag: tags.definition(tags.variableName), color: a.blue },
-    { tag: tags.string, color: a.green },
-    { tag: tags.special(tags.string), color: a.cyan },
-    { tag: tags.comment, color: a.brightBlack, fontStyle: 'italic' },
-    { tag: tags.number, color: a.yellow },
-    { tag: tags.typeName, color: a.yellow },
-    { tag: tags.className, color: a.yellow },
-    { tag: tags.propertyName, color: a.blue },
-    { tag: tags.function(tags.variableName), color: a.blue },
-    { tag: tags.function(tags.propertyName), color: a.blue },
-    { tag: tags.tagName, color: a.red },
-    { tag: tags.attributeName, color: a.yellow },
-    { tag: tags.labelName, color: a.blue },
-    { tag: tags.namespace, color: a.red },
-    { tag: tags.macroName, color: a.red },
-    { tag: tags.atom, color: a.cyan },
-    { tag: tags.literal, color: a.cyan },
-    { tag: tags.separator, color: a.white },
-    { tag: tags.regexp, color: a.green },
-    { tag: tags.escape, color: a.cyan },
-    { tag: tags.meta, color: a.white },
-    { tag: tags.url, color: a.cyan, textDecoration: 'underline' },
-    { tag: tags.invalid, color: '#ffffff', backgroundColor: a.red },
+    { tag: tags.keyword, color: colors.magenta },
+    { tag: tags.operator, color: colors.cyan },
+    { tag: tags.special(tags.variableName), color: colors.red },
+    { tag: tags.variableName, color: colors.red },
+    { tag: tags.definition(tags.variableName), color: colors.blue },
+    { tag: tags.string, color: colors.green },
+    { tag: tags.special(tags.string), color: colors.cyan },
+    { tag: tags.comment, color: colors.brightBlack, fontStyle: 'italic' },
+    { tag: tags.number, color: colors.yellow },
+    { tag: tags.typeName, color: colors.yellow },
+    { tag: tags.className, color: colors.yellow },
+    { tag: tags.propertyName, color: colors.blue },
+    { tag: tags.function(tags.variableName), color: colors.blue },
+    { tag: tags.function(tags.propertyName), color: colors.blue },
+    { tag: tags.tagName, color: colors.red },
+    { tag: tags.attributeName, color: colors.yellow },
+    { tag: tags.labelName, color: colors.blue },
+    { tag: tags.namespace, color: colors.red },
+    { tag: tags.macroName, color: colors.red },
+    { tag: tags.atom, color: colors.cyan },
+    { tag: tags.literal, color: colors.cyan },
+    { tag: tags.separator, color: colors.white },
+    { tag: tags.regexp, color: colors.green },
+    { tag: tags.escape, color: colors.cyan },
+    { tag: tags.meta, color: colors.white },
+    { tag: tags.url, color: colors.cyan, textDecoration: 'underline' },
+    { tag: tags.invalid, color: '#ffffff', backgroundColor: colors.red },
   ]);
 }
 
@@ -134,7 +130,6 @@ const languageMap: Record<string, () => ReturnType<typeof javascript>> = {
   py: () => python(),
   html: () => html(),
   css: () => css(),
-  // Terminal/shell languages and pseudo use no-op extension (plain text)
   bash: () => javascript(),
   powershell: () => javascript(),
   cmd: () => javascript(),
@@ -162,33 +157,77 @@ interface CodeInputProps {
   onChange: (value: string) => void;
   language?: string;
   codeThemeId?: string;
+  skin?: UISkin;
+  typography?: TypographySettings;
+  appearance?: SceneAppearance;
   className?: string;
 }
 
-export function CodeInput({ value, onChange, language = 'javascript', codeThemeId, className }: CodeInputProps) {
+const fallbackSkin: UISkin = {
+  id: 'fallback',
+  name: 'Fallback',
+  isBuiltIn: true,
+  density: 'comfortable',
+  tokens: {
+    bgBase: '#0b0f14', bgElevated: '#111820', bgPanel: '#16202a', textPrimary: '#f4f7fb',
+    textSecondary: '#a6b3c2', textMuted: '#667789', accent: '#00e676', accentForeground: '#031108',
+    border: '#263341', borderStrong: '#3a4b5b', danger: '#ff5f57', success: '#00e676', warning: '#ffbd2e',
+    radiusSm: '4px', radiusMd: '6px', radiusLg: '10px', fontUI: 'Inter, sans-serif',
+    fontMono: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
+  },
+};
+
+const fallbackTypography: TypographySettings = {
+  fontSize: 15,
+  fontFamily: fallbackSkin.tokens.fontMono,
+  lineHeight: 1.6,
+  letterSpacing: 0,
+};
+
+export function CodeInput({
+  value,
+  onChange,
+  language = 'javascript',
+  codeThemeId,
+  skin = fallbackSkin,
+  typography = fallbackTypography,
+  appearance,
+  className,
+}: CodeInputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const themeCompartmentRef = useRef(new Compartment());
+  const languageCompartmentRef = useRef(new Compartment());
+  const highlightCompartmentRef = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   useEffect(() => {
     onChangeRef.current = onChange;
-  });
+  }, [onChange]);
 
-  const codeTheme = codeThemeId ? getThemeById(codeThemeId) : null;
-  const highlightStyle = useMemo(() => {
-    if (!codeTheme) return codereelHighlightStyle;
-    return buildHighlightStyleFromTheme(codeTheme);
-  }, [codeTheme]);
-
+  const codeTheme = useMemo(() => codeThemeId ? getThemeById(codeThemeId) || null : null, [codeThemeId]);
+  const editorTheme = useMemo(() => buildEditorTheme(codeTheme, skin, typography, appearance), [codeTheme, skin, typography, appearance]);
+  const highlightStyle = useMemo(() => buildHighlightStyleFromTheme(codeTheme), [codeTheme]);
   const getLanguage = useCallback(() => {
     const factory = languageMap[language] || languageMap.javascript;
     return factory();
   }, [language]);
 
+  const initialValueRef = useRef(value);
+  const editorThemeRef = useRef(editorTheme);
+  const getLanguageRef = useRef(getLanguage);
+  const highlightStyleRef = useRef(highlightStyle);
+
+  useEffect(() => {
+    editorThemeRef.current = editorTheme;
+    getLanguageRef.current = getLanguage;
+    highlightStyleRef.current = highlightStyle;
+  }, [editorTheme, getLanguage, highlightStyle]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
     const state = EditorState.create({
-      doc: value,
+      doc: initialValueRef.current,
       extensions: [
         lineNumbers(),
         highlightActiveLine(),
@@ -196,52 +235,46 @@ export function CodeInput({ value, onChange, language = 'javascript', codeThemeI
         history(),
         bracketMatching(),
         closeBrackets(),
-        syntaxHighlighting(highlightStyle),
-        codereelTheme,
-        getLanguage(),
+        themeCompartmentRef.current.of(editorThemeRef.current),
+        highlightCompartmentRef.current.of(syntaxHighlighting(highlightStyleRef.current)),
+        languageCompartmentRef.current.of(getLanguageRef.current()),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            onChangeRef.current(update.state.doc.toString());
-          }
+          if (update.docChanged) onChangeRef.current(update.state.doc.toString());
         }),
       ],
     });
 
-    const view = new EditorView({
-      state,
-      parent: containerRef.current,
-    });
-
+    const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
-
     return () => {
       view.destroy();
       viewRef.current = null;
     };
-  }, [getLanguage, highlightStyle, value]); // Re-create on language or theme change; value sync is handled by separate effect
+  }, []);
 
-  // Sync external value changes
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    view.dispatch({
+      effects: [
+        themeCompartmentRef.current.reconfigure(editorTheme),
+        languageCompartmentRef.current.reconfigure(getLanguage()),
+        highlightCompartmentRef.current.reconfigure(syntaxHighlighting(highlightStyle)),
+      ],
+    });
+  }, [editorTheme, getLanguage, highlightStyle]);
 
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
     const currentDoc = view.state.doc.toString();
     if (currentDoc !== value) {
-      view.dispatch({
-        changes: {
-          from: 0,
-          to: currentDoc.length,
-          insert: value,
-        },
-      });
+      view.dispatch({ changes: { from: 0, to: currentDoc.length, insert: value } });
     }
   }, [value]);
 
   return (
-    <div
-      ref={containerRef}
-      className={`h-full overflow-hidden [&_.cm-editor]:h-full ${className || ''}`}
-    />
+    <div ref={containerRef} className={`h-full overflow-hidden [&_.cm-editor]:h-full ${className || ''}`} />
   );
 }

@@ -1,120 +1,101 @@
 import type { Exporter, ExportOptions, CodeToken } from '@/core/types';
 import { highlightCode } from '@/core/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
 export const gifExporter: Exporter = {
   tierName: 'gif',
-  isSupported: typeof window !== 'undefined',
+  isSupported: typeof window !== 'undefined' && typeof document !== 'undefined',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, playbackSpeedMultiplier } = opts;
+    const {
+      timeline, source, language, typingConfig, theme, background, windowChrome,
+      typography, skin, width, height, fps, playbackSpeedMultiplier,
+    } = opts;
 
-    // Pre-compute Shiki tokens on main thread
     let allTokenLines: CodeToken[][] | null = null;
     try {
       const highlightResult = await highlightCode(source, language, theme.shikiTheme || theme.id);
-      allTokenLines = highlightResult.lines.map(line =>
-        line.tokens.map(t => ({ content: t.content, color: t.color, offset: t.offset }))
+      allTokenLines = highlightResult.lines.map((line) =>
+        line.tokens.map((token) => ({ content: token.content, color: token.color, offset: token.offset })),
       );
     } catch {
-      // Fallback: render without syntax highlighting
+      // Syntax highlighting is optional.
     }
 
-    // GIF at reduced fps for reasonable file size
+    onProgress(5);
     const gifFps = Math.min(fps, 15);
-    const effectiveMultiplier = Math.max(0.1, playbackSpeedMultiplier ?? 1);
-    const totalFrames = Math.ceil((timeline.totalDurationMs / 1000) * gifFps * effectiveMultiplier);
-    // Scale down for GIF to keep file size manageable
+    const effectiveMultiplier = Math.max(0.1, playbackSpeedMultiplier || 1);
     const scale = Math.min(1, 640 / Math.max(width, height));
-    const gw = Math.round(width * scale);
-    const gh = Math.round(height * scale);
+    const gifWidth = Math.max(1, Math.round(width * scale));
+    const gifHeight = Math.max(1, Math.round(height * scale));
+    const frameDelay = Math.max(20, Math.round(1000 / (gifFps * effectiveMultiplier)));
 
-    // Main-thread canvas for captureStream
+    const coordinator = new RenderCoordinator({
+      width,
+      height,
+      fps: gifFps,
+      timeline,
+      source,
+      typingConfig,
+      theme,
+      background,
+      windowChrome,
+      typography,
+      skin,
+      appearance: opts.appearance,
+      tokenLines: allTokenLines,
+      speedMultiplier: effectiveMultiplier,
+    });
+    if (signal) signal.addEventListener('abort', () => coordinator.cancel(), { once: true });
+
     const canvas = document.createElement('canvas');
-    canvas.width = gw;
-    canvas.height = gh;
-    const mainCtx = canvas.getContext('2d')!;
+    canvas.width = gifWidth;
+    canvas.height = gifHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) {
+      coordinator.terminate();
+      throw new Error('This browser cannot create a GIF canvas.');
+    }
 
-    const stream = (canvas as HTMLCanvasElement).captureStream(gifFps);
-    const mimeType = 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
-    const chunks: Blob[] = [];
+    const gif = GIFEncoder();
+    const totalFrames = Math.max(1, coordinator.totalFrameCount);
+    let frameCount = 0;
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunks.push(e.data);
-    };
+    try {
+      coordinator.startPipeline(2);
+      let frame: Awaited<ReturnType<RenderCoordinator['nextFrame']>>;
+      while ((frame = await coordinator.nextFrame()) !== null) {
+        context.clearRect(0, 0, gifWidth, gifHeight);
+        context.drawImage(frame.bitmap, 0, 0, gifWidth, gifHeight);
+        frame.bitmap.close();
 
-    return new Promise((resolve, reject) => {
-      let cancelled = false;
+        const rgba = context.getImageData(0, 0, gifWidth, gifHeight).data;
+        const palette = quantize(rgba, 256, { format: 'rgb565' });
+        const indexed = applyPalette(rgba, palette, 'rgb565');
+        gif.writeFrame(indexed, gifWidth, gifHeight, {
+          palette,
+          delay: frameDelay,
+          repeat: 0,
+        });
 
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        onProgress(100);
-        resolve(blob);
-      };
-
-      recorder.onerror = (e) => reject(e);
-
-      // Spawn render worker at scaled dimensions
-      const coordinator = new RenderCoordinator({
-        width: gw,
-        height: gh,
-        fps: gifFps,
-        timeline,
-        source,
-        typingConfig,
-        theme,
-        background,
-        windowChrome,
-        typography,
-        tokenLines: allTokenLines,
-        speedMultiplier: playbackSpeedMultiplier,
-        onFrameReady: () => {
-          /* frames arrive through nextFrame(); nothing else needed here */
-        },
-      });
-
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          cancelled = true;
-          coordinator.cancel();
-          recorder.stop();
-        }, { once: true });
+        frameCount += 1;
+        onProgress(5 + Math.round((frame.frameIndex / totalFrames) * 90));
       }
 
-      coordinator.startPipeline(2);
-      recorder.start();
-
-      const frameDuration = 1000 / gifFps;
-
-      (async () => {
-        try {
-          let frame: Awaited<ReturnType<RenderCoordinator['nextFrame']>>;
-          while ((frame = await coordinator.nextFrame()) !== null) {
-            if (cancelled) break;
-
-            // Paint worker-rendered bitmap onto main-thread canvas for captureStream
-            mainCtx.clearRect(0, 0, gw, gh);
-            mainCtx.drawImage(frame.bitmap, 0, 0);
-            frame.bitmap.close();
-
-            onProgress(Math.round((frame.frameIndex / totalFrames) * 95));
-
-            // Wait frame duration to maintain real-time recording pace
-            await new Promise(r => setTimeout(r, frameDuration));
-          }
-        } catch (err) {
-          if (!(err instanceof Error && err.message.includes('cancelled'))) {
-            recorder.onerror = () => {};
-            recorder.stop();
-            reject(err);
-            return;
-          }
-        }
-
-        if (recorder.state !== 'inactive') recorder.stop();
-        coordinator.terminate();
-      })();
-    });
+      if (frameCount === 0) throw new Error('The GIF renderer produced no frames.');
+      gif.finish();
+      coordinator.terminate();
+      onProgress(100);
+      const bytes = gif.bytes();
+      const output = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      return new Blob([output], { type: 'image/gif' });
+    } catch (error) {
+      coordinator.terminate();
+      if (error instanceof Error && error.message.includes('cancelled')) {
+        return new Blob([], { type: 'image/gif' });
+      }
+      throw error;
+    }
   },
 };

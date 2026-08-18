@@ -1,4 +1,4 @@
-import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken } from '@/core/types';
+import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken, UISkin, SceneAppearance } from '@/core/types';
 import { renderFrame } from '@/core/render/renderFrame';
 import { getStateAtTime } from '@/core/timeline/getStateAtTime';
 
@@ -16,6 +16,8 @@ export type WorkerInMessage =
       background: BackgroundPreset;
       windowChrome: WindowChromeConfig;
       typography: TypographySettings;
+      skin: UISkin;
+      appearance: SceneAppearance;
       tokenLines: CodeToken[][] | null;
       speedMultiplier: number;
     }
@@ -44,6 +46,8 @@ let config: {
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
+  skin: UISkin;
+  appearance: SceneAppearance;
   tokenLines: CodeToken[][] | null;
   speedMultiplier: number;
 } | null = null;
@@ -65,6 +69,8 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         background: msg.background,
         windowChrome: msg.windowChrome,
         typography: msg.typography,
+        skin: msg.skin,
+        appearance: msg.appearance,
         tokenLines: msg.tokenLines,
         speedMultiplier: msg.speedMultiplier,
       };
@@ -83,10 +89,9 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
       if (cancelled) return;
 
       const { frameIndex } = msg;
-      // Apply the export playback speed multiplier: higher multiplier = shorter
-      // virtual duration per frame, so the video plays back faster.
-      const effectiveFps = config.fps * (config.speedMultiplier || 1);
-      const tMs = (frameIndex / effectiveFps) * 1000;
+      // Sample the source timeline faster or slower while keeping the output
+      // frame rate stable. The coordinator emits fewer frames for faster speed.
+      const tMs = (frameIndex / config.fps) * 1000 * (config.speedMultiplier || 1);
       const state = getStateAtTime(config.timeline, tMs, config.source, config.typingConfig);
 
       // Map pre-computed token lines to visible lines
@@ -104,6 +109,8 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         windowChrome: config.windowChrome,
         typography: config.typography,
         typingConfig: config.typingConfig,
+        skin: config.skin,
+        appearance: config.appearance,
         frameIndex,
         fps: config.fps,
         visibleLines: state.visibleLines,

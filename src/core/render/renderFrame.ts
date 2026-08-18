@@ -22,6 +22,8 @@ export interface RenderFrameOptions {
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
   typingConfig: TypingConfig;
+  skin: import('@/core/types').UISkin;
+  appearance: import('@/core/types').SceneAppearance;
   frameIndex: number;
   fps: number;
   visibleLines: string[];
@@ -29,7 +31,7 @@ export interface RenderFrameOptions {
 }
 
 export function renderFrame(options: RenderFrameOptions): void {
-  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, frameIndex, fps, visibleLines, tokenLines } = options;
+  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, skin, appearance, frameIndex, fps, visibleLines, tokenLines } = options;
 
   ctx.clearRect(0, 0, width, height);
 
@@ -60,6 +62,8 @@ export function renderFrame(options: RenderFrameOptions): void {
     windowChrome,
     typography,
     typingConfig,
+    skin,
+    appearance,
     frameIndex,
     fps,
   };

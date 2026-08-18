@@ -6,6 +6,8 @@ import type {
   WindowChromeConfig,
   TypographySettings,
   CodeToken,
+  UISkin,
+  SceneAppearance,
 } from '@/core/types';
 import type { WorkerInMessage, WorkerOutMessage } from '@/workers/render.worker';
 
@@ -25,6 +27,8 @@ export interface RenderCoordinatorOptions {
   background: BackgroundPreset;
   windowChrome: WindowChromeConfig;
   typography: TypographySettings;
+  skin: UISkin;
+  appearance: SceneAppearance;
   tokenLines: CodeToken[][] | null;
   onFrameReady?: (index: number) => void;
   speedMultiplier?: number;
@@ -51,9 +55,9 @@ export class RenderCoordinator {
 
   constructor(opts: RenderCoordinatorOptions) {
     this.speedMultiplier = Math.max(0.1, opts.speedMultiplier ?? 1);
-    // Effective frame count scales with the playback speed multiplier — a 2x
-    // export produces half the frames because each frame covers more timeline.
-    this.totalFrames = Math.ceil((opts.timeline.totalDurationMs / 1000) * opts.fps * this.speedMultiplier);
+    // The output is encoded at the selected FPS. Speed changes how much source
+    // timeline time each output frame advances, so 2x produces half as many frames.
+    this.totalFrames = Math.max(1, Math.ceil((opts.timeline.totalDurationMs / 1000) * opts.fps / this.speedMultiplier));
     this.onFrameReady = opts.onFrameReady;
 
     // Spawn worker
@@ -85,6 +89,8 @@ export class RenderCoordinator {
       background: opts.background,
       windowChrome: opts.windowChrome,
       typography: opts.typography,
+      skin: opts.skin,
+      appearance: opts.appearance,
       tokenLines: opts.tokenLines,
       speedMultiplier: this.speedMultiplier,
     });

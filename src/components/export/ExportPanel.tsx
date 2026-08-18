@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useExportStore, useProjectStore } from '@/stores';
+import { useExportStore, useProjectStore, useUISkinStore } from '@/stores';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,21 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { platformPresets } from '@/data/platformPresets';
 import { selectExporter } from '@/core/export';
-import { buildTimelineFromSource } from '@/core/timeline';
-import { parseMarkup } from '@/core/markup/parser';
-import { getBackgroundById } from '@/data/backgroundPresets';
-import { getThemeById } from '@/data/codeThemes';
+import { resolveSceneRenderModel } from '@/core/render/sceneModel';
 import type { ExportFormat } from '@/core/types';
-
-function resolveExportDimensions(aspectRatio: string, customWidth?: number, customHeight?: number): { w: number; h: number } {
-  if (aspectRatio === 'custom' && customWidth && customHeight) return { w: customWidth, h: customHeight };
-  const map: Record<string, { w: number; h: number }> = {
-    '9:16': { w: 1080, h: 1920 },
-    '1:1': { w: 1080, h: 1080 },
-    '16:9': { w: 1920, h: 1080 },
-  };
-  return map[aspectRatio] || { w: 1080, h: 1920 };
-}
 
 export function ExportPanel() {
   const {
@@ -42,18 +29,21 @@ export function ExportPanel() {
   });
   const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
   const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
-
-  // Resolve theme from scene codeThemeId (BLK-06)
-  const sceneTheme = useMemo(() => {
-    if (!currentScene) return null;
-    return getThemeById(currentScene.codeThemeId) || null;
-  }, [currentScene]);
-
-  // Resolve dimensions from project aspect ratio (CRI-08)
-  const projectDimensions = useMemo(() => {
-    if (!currentProject) return { w: 1080, h: 1920 };
-    return resolveExportDimensions(currentProject.aspectRatio, currentProject.customWidth, currentProject.customHeight);
-  }, [currentProject]);
+  const skins = useUISkinStore(s => s.skins);
+  const currentSkinId = useUISkinStore(s => s.currentSkinId);
+  const currentSkin = useMemo(
+    () => skins.find(skin => skin.id === currentSkinId) || skins[0],
+    [skins, currentSkinId],
+  );
+  const sceneModel = useMemo(() => {
+    if (!currentProject || !currentScene || !currentSkin) return null;
+    return resolveSceneRenderModel(currentProject, currentScene, { skin: currentSkin, fps });
+  }, [currentProject, currentScene, currentSkin, fps]);
+  const sceneTheme = sceneModel?.theme || null;
+  const projectDimensions = {
+    w: sceneModel?.width || 1080,
+    h: sceneModel?.height || 1920,
+  };
 
   // Override dimensions from platform preset only when a real preset is
   // selected — "project-default" respects the project's own aspect ratio (BLK-04).
@@ -63,32 +53,23 @@ export function ExportPanel() {
 
   // Warn when the timeline exceeds the selected platform's max duration.
   const durationWarning = useMemo(() => {
-    if (selectedPresetData && selectedPresetData.maxDurationMs < Infinity && currentProject) {
-      const { cleanSource, events } = parseMarkup(currentScene?.sourceWithMarkup || '');
-      const tl = buildTimelineFromSource({
-        source: cleanSource,
-        typingConfig: currentScene?.typingConfig || { mode: 'character' as const, baseSpeed: 40, cursorStyle: 'bar' as const, cursorBlinkRate: 1, autoScroll: true },
-        fps,
-        markupEvents: events,
-      });
-      if (tl.totalDurationMs > selectedPresetData.maxDurationMs) {
-        return `This timeline (~${Math.round(tl.totalDurationMs / 1000)}s) exceeds the ${selectedPresetData.label} limit of ${selectedPresetData.maxDurationMs / 1000}s.`;
+    if (selectedPresetData && selectedPresetData.maxDurationMs < Infinity && sceneModel) {
+      if (sceneModel.timeline.totalDurationMs > selectedPresetData.maxDurationMs) {
+        return `This timeline (~${Math.round(sceneModel.timeline.totalDurationMs / 1000)}s) exceeds the ${selectedPresetData.label} limit of ${selectedPresetData.maxDurationMs / 1000}s.`;
       }
     }
     return '';
-  }, [selectedPresetData, fps, currentProject, currentScene]);
+  }, [selectedPresetData, sceneModel]);
 
   const handleExport = async () => {
-    if (!currentScene || !sceneTheme) return;
+    if (!sceneModel || !sceneTheme) {
+      startExport();
+      setExportStatus('Export failed');
+      setExportError('The current scene is still loading. Please try again after the preview is ready.');
+      return;
+    }
 
-    const { cleanSource, events: markupEvents } = parseMarkup(currentScene.sourceWithMarkup);
-
-    const timeline = buildTimelineFromSource({
-      source: cleanSource,
-      typingConfig: currentScene.typingConfig,
-      fps,
-      markupEvents,
-    });
+    const { timeline, source: cleanSource } = sceneModel;
 
     setExportError('');
     startExport();
@@ -122,18 +103,18 @@ export function ExportPanel() {
 
       setExportStatus(`Exporting via ${exporter.tierName}...`);
 
-      const background = getBackgroundById(currentScene.backgroundPresetId);
-
       const blob = await exporter.export(
         {
           timeline,
           source: cleanSource,
-          language: currentScene.language,
-          typingConfig: currentScene.typingConfig,
-          theme: sceneTheme,
-          background,
-          windowChrome: currentScene.windowChrome,
-          typography: currentScene.typography,
+          language: sceneModel.language,
+          typingConfig: sceneModel.typingConfig,
+          theme: sceneModel.theme,
+          background: sceneModel.background,
+          windowChrome: sceneModel.windowChrome,
+          typography: sceneModel.typography,
+          skin: sceneModel.skin,
+          appearance: sceneModel.appearance,
           width: exportWidth,
           height: exportHeight,
           fps,

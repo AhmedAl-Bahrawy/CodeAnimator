@@ -1,6 +1,10 @@
 import type { Exporter, ExportOptions, CodeToken } from '@/core/types';
 import { highlightCode } from '@/core/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
+import { mediaRecorderExporter } from './mediaRecorderExporter';
+import { h264Mp4FallbackExporter } from './h264Mp4Fallback';
+import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
+import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 
 async function checkCodecSupport(codec: string, width: number, height: number, fps: number): Promise<boolean> {
   try {
@@ -23,57 +27,54 @@ export const webCodecsExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'VideoEncoder' in window,
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, format, playbackSpeedMultiplier } = opts;
+    const {
+      timeline, source, language, typingConfig, theme, background, windowChrome,
+      typography, skin, width, height, fps, format, playbackSpeedMultiplier,
+    } = opts;
 
-    if (!('VideoEncoder' in window) || !('VideoDecoder' in window)) {
-      throw new Error('WebCodecs not supported in this browser');
+    if (!('VideoEncoder' in window)) {
+      if (format === 'mp4') {
+        return h264Mp4FallbackExporter(opts, onProgress, signal);
+      }
+      if (mediaRecorderExporter.isSupported) {
+        return mediaRecorderExporter.export(opts, onProgress, signal);
+      }
+      throw new Error('This browser cannot encode video. Choose GIF or use a browser with WebCodecs support.');
     }
 
     onProgress(2);
-
-    // Determine best supported codec
-    const webmCodec = 'vp09.00.10.08';
     const mp4Codec = 'avc1.42001e';
-
+    const webmCodec = 'vp09.00.10.08';
     let codec: string;
-    let mimeType: string;
 
-    if (format === 'webm') {
-      if (await checkCodecSupport(webmCodec, width, height, fps)) {
-        codec = webmCodec;
-        mimeType = 'video/webm';
-      } else {
-        throw new Error('VP9 codec not supported. Try using MediaRecorder fallback or a different browser.');
+    if (format === 'mp4') {
+      if (!(await checkCodecSupport(mp4Codec, width, height, fps))) {
+        return h264Mp4FallbackExporter(opts, onProgress, signal);
       }
+      codec = mp4Codec;
     } else {
-      // mp4 — try H.264, fall back to VP9 in WebM container
-      if (await checkCodecSupport(mp4Codec, width, height, fps)) {
-        codec = mp4Codec;
-        mimeType = 'video/mp4';
-      } else if (await checkCodecSupport(webmCodec, width, height, fps)) {
-        codec = webmCodec;
-        mimeType = 'video/webm';
-      } else {
-        throw new Error('No supported video codec found. Try WebM format or a different browser.');
+      if (!(await checkCodecSupport(webmCodec, width, height, fps))) {
+        if (mediaRecorderExporter.isSupported) {
+          return mediaRecorderExporter.export(opts, onProgress, signal);
+        }
+        throw new Error('This browser cannot encode VP9 WebM. Choose MP4, GIF, or use a browser with VP9 WebCodecs support.');
       }
+      codec = webmCodec;
     }
 
     onProgress(3);
 
-    // Pre-compute Shiki tokens on main thread (Shiki can't run in workers)
     let allTokenLines: CodeToken[][] | null = null;
     try {
       const highlightResult = await highlightCode(source, language, theme.shikiTheme || theme.id);
-      allTokenLines = highlightResult.lines.map(line =>
-        line.tokens.map(t => ({ content: t.content, color: t.color, offset: t.offset }))
+      allTokenLines = highlightResult.lines.map((line) =>
+        line.tokens.map((token) => ({ content: token.content, color: token.color, offset: token.offset })),
       );
     } catch {
-      // Fallback: render without syntax highlighting
+      // Syntax highlighting is optional; the frame renderer can draw plain text.
     }
 
     onProgress(5);
-
-    // Spawn render worker
     const coordinator = new RenderCoordinator({
       width,
       height,
@@ -85,66 +86,84 @@ export const webCodecsExporter: Exporter = {
       background,
       windowChrome,
       typography,
+      skin,
+      appearance: opts.appearance,
       tokenLines: allTokenLines,
       speedMultiplier: playbackSpeedMultiplier,
     });
 
-    if (signal) {
-      signal.addEventListener('abort', () => coordinator.cancel(), { once: true });
-    }
+    if (signal) signal.addEventListener('abort', () => coordinator.cancel(), { once: true });
 
-    const totalFrames = coordinator.totalFrameCount;
-    const chunks: ArrayBuffer[] = [];
+    const totalFrames = Math.max(1, coordinator.totalFrameCount);
+    const useMp4 = format === 'mp4';
+    const mp4Target = useMp4 ? new Mp4Target() : null;
+    const webmTarget = useMp4 ? null : new WebmTarget();
+    const mp4Muxer = mp4Target
+      ? new Mp4Muxer({
+          target: mp4Target,
+          video: { codec: 'avc', width, height, frameRate: fps },
+          fastStart: 'in-memory',
+        })
+      : null;
+    const webmMuxer = webmTarget
+      ? new WebmMuxer({
+          target: webmTarget,
+          video: { codec: 'V_VP9', width, height, frameRate: fps },
+          firstTimestampBehavior: 'offset',
+        })
+      : null;
 
+    let encoderError: Error | null = null;
     const encoder = new VideoEncoder({
-      output: (chunk: EncodedVideoChunk) => {
-        const buffer = new ArrayBuffer(chunk.byteLength);
-        chunk.copyTo(buffer);
-        chunks.push(buffer);
+      output: (chunk: EncodedVideoChunk, metadata?: EncodedVideoChunkMetadata) => {
+        if (mp4Muxer) mp4Muxer.addVideoChunk(chunk, metadata);
+        else webmMuxer?.addVideoChunk(chunk, metadata);
       },
-      error: (e: DOMException) => {
-        console.error('VideoEncoder error:', e);
+      error: (error: DOMException) => {
+        encoderError = new Error(error.message || 'Video encoder failed.');
       },
     });
-
-    encoder.configure({
-      codec,
-      width,
-      height,
-      bitrate: 8_000_000,
-      framerate: fps,
-      latencyMode: 'quality',
-    });
-
-    // Pipeline: dispatch frames in batches, encode as they arrive
-    coordinator.startPipeline(4);
 
     try {
+      encoder.configure({
+        codec,
+        width,
+        height,
+        bitrate: 8_000_000,
+        framerate: fps,
+        latencyMode: 'quality',
+      });
+
+      coordinator.startPipeline(4);
       let frame: Awaited<ReturnType<RenderCoordinator['nextFrame']>>;
       while ((frame = await coordinator.nextFrame()) !== null) {
-        const videoFrame = new VideoFrame(frame.bitmap, { timestamp: (frame.frameIndex / fps) * 1_000_000 });
-        await encoder.encode(videoFrame, { keyFrame: frame.frameIndex % (fps * 2) === 0 });
+        const timestamp = Math.round((frame.frameIndex / fps) * 1_000_000);
+        const videoFrame = new VideoFrame(frame.bitmap, { timestamp });
+        encoder.encode(videoFrame, { keyFrame: frame.frameIndex % Math.max(1, fps * 2) === 0 });
         videoFrame.close();
         frame.bitmap.close();
-
         onProgress(5 + Math.round((frame.frameIndex / totalFrames) * 85));
       }
-    } catch (err) {
-      coordinator.terminate();
+
+      await encoder.flush();
+      if (encoderError) throw encoderError;
       encoder.close();
-      if (err instanceof Error && err.message.includes('cancelled')) {
-        return new Blob([], { type: mimeType });
+      coordinator.terminate();
+      mp4Muxer?.finalize();
+      webmMuxer?.finalize();
+
+      onProgress(95);
+      const output = useMp4 ? mp4Target?.buffer : webmTarget?.buffer;
+      if (!output || output.byteLength === 0) throw new Error('The encoder produced an empty file.');
+      onProgress(100);
+      return new Blob([output], { type: useMp4 ? 'video/mp4' : 'video/webm' });
+    } catch (error) {
+      coordinator.terminate();
+      if (encoder.state !== 'closed') encoder.close();
+      if (error instanceof Error && error.message.includes('cancelled')) {
+        return new Blob([], { type: useMp4 ? 'video/mp4' : 'video/webm' });
       }
-      throw err;
+      throw error;
     }
-
-    await encoder.flush();
-    encoder.close();
-    coordinator.terminate();
-
-    onProgress(95);
-    const blob = new Blob(chunks, { type: mimeType });
-    onProgress(100);
-    return blob;
   },
 };

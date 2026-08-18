@@ -1,8 +1,5 @@
 import type { RenderContext, CodeToken } from '@/core/types';
 
-const MONO_FONT = '"SF Mono", "Fira Code", "Cascadia Code", "JetBrains Mono", monospace';
-const LINE_HEIGHT_MULT = 1.6;
-const GUTTER_WIDTH = 52;
 
 // ====== Layer 1: Scene Background ======
 export function drawBackground(ctx: RenderContext): void {
@@ -28,7 +25,7 @@ export function drawBackground(ctx: RenderContext): void {
 
 // ====== Layer 2: Outer Margin ======
 export function drawMargin(ctx: RenderContext): void {
-  const { ctx: c, width, height, windowChrome } = ctx;
+  const { ctx: c, width, height, windowChrome, skin } = ctx;
   const m = windowChrome.margin;
   if (m <= 0) return;
 
@@ -40,7 +37,9 @@ export function drawMargin(ctx: RenderContext): void {
   const r = windowChrome.borderRadius;
 
   c.save();
-  c.fillStyle = windowChrome.marginFill || 'transparent';
+  c.fillStyle = windowChrome.marginFill && windowChrome.marginFill !== 'transparent'
+    ? windowChrome.marginFill
+    : skin.tokens.bgBase;
   c.beginPath();
   c.rect(0, 0, width, height);
   c.roundRect(frameX, frameY, frameW, frameH, r > 0 ? r + 4 : 0);
@@ -50,11 +49,10 @@ export function drawMargin(ctx: RenderContext): void {
 
 // ====== Helper: Compute frame geometry ======
 function getFrameGeometry(ctx: RenderContext) {
-  const { width, height, windowChrome, typography } = ctx;
+  const { width, height, windowChrome, appearance } = ctx;
   const m = windowChrome.margin;
-  const hasTitleBar = windowChrome.style !== 'none';
-  const titleBarHeight = hasTitleBar ? 38 : 0;
-  const lineHeight = typography.fontSize * LINE_HEIGHT_MULT;
+  const titleBarHeight = appearance.titleBarHeightPx;
+  const lineHeight = appearance.lineHeightPx;
 
   return {
     frameX: m,
@@ -66,15 +64,15 @@ function getFrameGeometry(ctx: RenderContext) {
     contentW: width - m * 2,
     contentH: height - m * 2 - titleBarHeight,
     titleBarHeight,
-    codeX: m + GUTTER_WIDTH + windowChrome.padding,
-    codeY: m + titleBarHeight + windowChrome.padding,
+    codeX: m + appearance.gutterWidthPx + appearance.contentPaddingPx,
+    codeY: m + titleBarHeight + appearance.contentPaddingPx,
     lineHeight,
   };
 }
 
 // ====== Layer 3: Window Frame ======
 export function drawWindowFrame(ctx: RenderContext): void {
-  const { ctx: c, windowChrome, theme } = ctx;
+  const { ctx: c, windowChrome, theme, skin } = ctx;
   const { frameX, frameY, frameW, frameH, titleBarHeight } = getFrameGeometry(ctx);
 
   // Drop shadow
@@ -93,7 +91,7 @@ export function drawWindowFrame(ctx: RenderContext): void {
 
   // Title bar background
   if (windowChrome.style !== 'none') {
-    c.fillStyle = adjustBrightness(theme.background, -12);
+    c.fillStyle = skin.tokens.bgElevated || adjustBrightness(theme.background, -12);
     c.beginPath();
     c.roundRect(frameX, frameY, frameW, titleBarHeight,
       [windowChrome.borderRadius, windowChrome.borderRadius, 0, 0]);
@@ -114,14 +112,14 @@ export function drawWindowFrame(ctx: RenderContext): void {
   } else if (windowChrome.style === 'windows') {
     drawWindowsControls(c, frameX + frameW - 16, frameY + titleBarHeight / 2);
   } else if (windowChrome.style === 'terminal') {
-    drawTerminalControls(c, frameX + 16, frameY + titleBarHeight / 2, windowChrome.title, theme);
+    drawTerminalControls(c, frameX + 16, frameY + titleBarHeight / 2, windowChrome.title, theme, ctx.appearance.monoFontFamily);
   }
 
   // Title text (for non-terminal styles)
   if (windowChrome.title && windowChrome.style !== 'terminal') {
     c.fillStyle = theme.foreground;
     c.globalAlpha = 0.5;
-    c.font = `12px ${MONO_FONT}`;
+    c.font = `12px ${ctx.appearance.monoFontFamily}`;
     c.textAlign = 'center';
     c.fillText(windowChrome.title, frameX + frameW / 2, frameY + titleBarHeight / 2 + 4);
     c.textAlign = 'left';
@@ -165,7 +163,8 @@ function drawTerminalControls(
   x: number,
   cy: number,
   title: string,
-  theme: import('@/core/types').CodeTheme
+  theme: import('@/core/types').CodeTheme,
+  monoFontFamily: string,
 ) {
   const r = 6;
   const gap = 20;
@@ -183,7 +182,7 @@ function drawTerminalControls(
   // Terminal prompt-style title
   if (title) {
     c.fillStyle = theme.ansi.green || '#50fa7b';
-    c.font = `bold 12px ${MONO_FONT}`;
+    c.font = `bold 12px ${monoFontFamily}`;
     c.textAlign = 'left';
     c.fillText(`~ ${title}`, x + gap * 3 + 12, cy + 4);
     c.textAlign = 'left';
@@ -192,27 +191,27 @@ function drawTerminalControls(
 
 // ====== Layer 4: Code Surface ======
 export function drawCodeSurface(ctx: RenderContext): void {
-  const { ctx: c, theme } = ctx;
+  const { ctx: c, appearance } = ctx;
   const { contentX, contentY, contentW, contentH } = getFrameGeometry(ctx);
 
-  c.fillStyle = theme.background;
+  c.fillStyle = appearance.codeBackground;
   c.fillRect(contentX, contentY, contentW, contentH);
 }
 
 // ====== Layer 5: Line Numbers ======
 export function drawLineNumbers(ctx: RenderContext, visibleLines: string[]): void {
-  const { ctx: c, state, windowChrome, theme, typography } = ctx;
+  const { ctx: c, state, appearance } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = windowChrome.padding;
+  const padding = appearance.contentPaddingPx;
   const scrollY = state.scrollOffsetPx || 0;
 
-  c.fillStyle = theme.lineNumberColor || adjustAlpha(theme.foreground, 0.25);
-  c.font = `${typography.fontSize - 1}px ${MONO_FONT}`;
+  c.fillStyle = appearance.gutterForeground;
+  c.font = `${Math.max(8, appearance.fontSizePx - 1)}px ${appearance.monoFontFamily}`;
   c.textAlign = 'right';
 
   for (let i = 0; i < visibleLines.length; i++) {
     const y = contentY + padding + i * lineHeight + lineHeight * 0.82 + scrollY;
-    c.fillText(String(i + 1), contentX + GUTTER_WIDTH - 10, y);
+    c.fillText(String(i + 1), contentX + appearance.gutterWidthPx - 10, y);
   }
 
   c.textAlign = 'left';
@@ -224,27 +223,27 @@ export function drawCodeText(
   visibleLines: string[],
   tokenLines: CodeToken[][] | null
 ): void {
-  const { ctx: c, state, windowChrome, theme, typography } = ctx;
+  const { ctx: c, state, appearance } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = windowChrome.padding;
+  const padding = appearance.contentPaddingPx;
   const scrollY = state.scrollOffsetPx || 0;
 
-  c.font = `${typography.fontSize}px ${typography.fontFamily || MONO_FONT}`;
-  c.letterSpacing = `${typography.letterSpacing || 0}px`;
+  c.font = `${appearance.fontSizePx}px ${appearance.monoFontFamily}`;
+  c.letterSpacing = `${appearance.letterSpacingPx}px`;
 
   for (let lineIdx = 0; lineIdx < visibleLines.length; lineIdx++) {
     const y = contentY + padding + lineIdx * lineHeight + lineHeight * 0.82 + scrollY;
-    const x = contentX + GUTTER_WIDTH;
+    const x = contentX + appearance.gutterWidthPx;
 
     if (tokenLines && tokenLines[lineIdx]) {
       let xPos = x;
       for (const token of tokenLines[lineIdx]) {
-        c.fillStyle = token.color || theme.foreground;
+        c.fillStyle = token.color || appearance.codeForeground;
         c.fillText(token.content, xPos, y);
         xPos += c.measureText(token.content).width;
       }
     } else {
-      c.fillStyle = theme.foreground;
+      c.fillStyle = appearance.codeForeground;
       c.fillText(visibleLines[lineIdx] || '', x, y);
     }
   }
@@ -254,11 +253,11 @@ export function drawCodeText(
 
 // ====== Layer 7: Highlight/Focus Overlay ======
 export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[]): void {
-  const { ctx: c, state, windowChrome, theme } = ctx;
+  const { ctx: c, state, appearance } = ctx;
   if (!state.activeHighlightRange && state.focusLine === null) return;
 
   const { contentX, contentY, contentW, contentH, lineHeight } = getFrameGeometry(ctx);
-  const padding = windowChrome.padding;
+  const padding = appearance.contentPaddingPx;
   const scrollY = state.scrollOffsetPx || 0;
 
   // Dim overlay for focus mode
@@ -273,7 +272,7 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
   // Highlight range
   if (state.activeHighlightRange) {
     const [start, end] = state.activeHighlightRange;
-    c.fillStyle = theme.selectionColor || 'rgba(99, 102, 241, 0.15)';
+    c.fillStyle = appearance.selectionColor;
 
     for (let i = start; i <= end && i < visibleLines.length; i++) {
       const y = contentY + padding + i * lineHeight + scrollY;
@@ -284,9 +283,9 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
 
 // ====== Layer 8: Cursor ======
 export function drawCursor(ctx: RenderContext): void {
-  const { ctx: c, state, windowChrome, theme, typography, typingConfig, frameIndex, fps } = ctx;
+  const { ctx: c, state, appearance, typingConfig, frameIndex, fps } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = windowChrome.padding;
+  const padding = appearance.contentPaddingPx;
   const scrollY = state.scrollOffsetPx || 0;
 
   const blinkCycle = Math.round(fps * (typingConfig.cursorBlinkRate || 0.7));
@@ -294,13 +293,13 @@ export function drawCursor(ctx: RenderContext): void {
   const isVisible = blinkFrame < blinkCycle / 2;
   if (!isVisible) return;
 
-  c.font = `${typography.fontSize}px ${typography.fontFamily || MONO_FONT}`;
-  const charWidth = c.measureText('M').width;
-  const cursorX = contentX + GUTTER_WIDTH + state.cursorCol * charWidth;
+  c.font = `${appearance.fontSizePx}px ${appearance.monoFontFamily}`;
+  const charWidth = c.measureText('M').width + appearance.letterSpacingPx;
+  const cursorX = contentX + appearance.gutterWidthPx + state.cursorCol * charWidth;
   const cursorY = contentY + padding + state.cursorLine * lineHeight + scrollY;
   const cursorH = lineHeight - 4;
 
-  c.fillStyle = theme.cursorColor || theme.foreground;
+  c.fillStyle = appearance.cursorColor;
 
   const cursorStyle = typingConfig.cursorStyle || 'bar';
   switch (cursorStyle) {
@@ -442,15 +441,4 @@ function adjustBrightness(hex: string, amount: number): string {
   const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + amount));
   const b = Math.min(255, Math.max(0, (num & 0xff) + amount));
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-}
-
-function adjustAlpha(color: string, alpha: number): string {
-  if (color.startsWith('#')) {
-    const num = parseInt(color.replace('#', ''), 16);
-    const r = (num >> 16) & 0xff;
-    const g = (num >> 8) & 0xff;
-    const b = num & 0xff;
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return color;
 }

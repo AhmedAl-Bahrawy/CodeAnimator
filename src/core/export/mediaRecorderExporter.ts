@@ -7,7 +7,7 @@ export const mediaRecorderExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'MediaRecorder' in window && typeof HTMLCanvasElement.prototype.captureStream === 'function',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, width, height, fps, playbackSpeedMultiplier } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, skin, width, height, fps, playbackSpeedMultiplier } = opts;
 
     if (!this.isSupported) {
       throw new Error('MediaRecorder not supported');
@@ -68,6 +68,8 @@ export const mediaRecorderExporter: Exporter = {
         background,
         windowChrome,
         typography,
+        skin,
+        appearance: opts.appearance,
         tokenLines: allTokenLines,
         speedMultiplier: playbackSpeedMultiplier,
         onFrameReady: () => {

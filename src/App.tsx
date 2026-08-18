@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useState } from 'react';
 import { AppShell } from './app/AppShell';
 import { TopBar } from './app/TopBar';
 import { CodeInput } from './components/editor/CodeInput';
@@ -12,8 +12,7 @@ import { TypographyControls } from './components/style/TypographyControls';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
 import { useProjectStore, useTimelineStore, useUISkinStore, useThemeStore } from './stores';
-import { buildTimelineFromSource } from './core/timeline';
-import { parseMarkup } from './core/markup/parser';
+import { resolveSceneRenderModel, mergeVisibleSourceWithMarkup } from './core/render/sceneModel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { UISkinGallery } from './components/style/UISkinGallery';
@@ -41,6 +40,17 @@ function App() {
   // Derive current project and scene from state (reactive selectors)
   const currentProject = projects.find(p => p.id === currentProjectId) || null;
   const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
+  const skins = useUISkinStore(s => s.skins);
+  const currentSkinId = useUISkinStore(s => s.currentSkinId);
+  const currentSkin = useMemo(
+    () => skins.find(skin => skin.id === currentSkinId) || skins[0],
+    [skins, currentSkinId],
+  );
+  const sceneModel = useMemo(() => {
+    if (!currentProject || !currentScene || !currentSkin) return null;
+    return resolveSceneRenderModel(currentProject, currentScene, { skin: currentSkin, fps: 30 });
+  }, [currentProject, currentScene, currentSkin]);
+  const visibleSource = sceneModel?.source || '';
 
   // Hydrate from IndexedDB on mount
   const [hydrated, setHydrated] = useState(false);
@@ -65,12 +75,11 @@ function App() {
           await useUISkinStore.getState().loadCustomSkins();
           await useThemeStore.getState().loadCustomThemes();
 
-          // Restore UI skin from localStorage
+          // Restore the selected built-in or custom UI skin after custom skins hydrate.
           const savedSkinId = localStorage.getItem('codereel-skin-id');
           if (savedSkinId) {
-            const skin = getUISkinById(savedSkinId);
-            if (skin) {
-              applySkinToDocument(skin);
+            const hydratedSkins = useUISkinStore.getState().skins;
+            if (hydratedSkins.some(skin => skin.id === savedSkinId)) {
               useUISkinStore.setState({ currentSkinId: savedSkinId });
             }
           }
@@ -86,37 +95,31 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist UI skin selection
-  const currentSkinId = useUISkinStore(s => s.currentSkinId);
+  // Keep the DOM shell synchronized with the exact skin consumed by the editor, canvas, and exporters.
   useEffect(() => {
-    if (hydrated) localStorage.setItem('codereel-skin-id', currentSkinId);
-  }, [currentSkinId, hydrated]);
+    if (!currentSkin) return;
+    applySkinToDocument(currentSkin);
+    if (hydrated) localStorage.setItem('codereel-skin-id', currentSkin.id);
+  }, [currentSkin, hydrated]);
 
   // Wire autosave subscription (HIGH-01)
   useEffect(() => {
     if (hydrated) startAutosaveSubscription(() => useProjectStore.getState().getCurrentProject());
   }, [hydrated]);
 
-  // Build timeline when source changes (strip markup first)
+  // Build the exact same scene model consumed by preview and export.
   useEffect(() => {
-    if (!currentScene) return;
-    const { cleanSource, events: markupEvents } = parseMarkup(currentScene.sourceWithMarkup);
-    const timeline = buildTimelineFromSource({
-      source: cleanSource,
-      typingConfig: currentScene.typingConfig,
-      fps: 30,
-      markupEvents,
-    });
-    setTimeline(timeline, cleanSource);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentScene?.sourceWithMarkup, currentScene?.typingConfig, setTimeline]);
+    if (!currentProject || !currentScene) return;
+    if (!sceneModel) return;
+    setTimeline(sceneModel.timeline, sceneModel.source);
+  }, [currentProject, currentScene, sceneModel, setTimeline]);
 
   const handleCodeChange = useCallback((value: string) => {
-    if (!currentProject) return;
+    if (!currentProject || !currentScene) return;
     updateScene(currentProject.id, currentSceneIndex, {
-      sourceWithMarkup: value,
+      sourceWithMarkup: mergeVisibleSourceWithMarkup(currentScene.sourceWithMarkup, value),
     });
-  }, [currentProject, currentSceneIndex, updateScene]);
+  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
 
   const handleLanguageChange = useCallback((lang: string) => {
     if (!currentProject) return;
@@ -187,15 +190,18 @@ function App() {
               Presets
             </Button>
             <span className="text-[10px] text-[var(--text-muted)] font-mono">
-              {currentScene.sourceWithMarkup.split('\n').length} lines
+              {visibleSource.split('\n').length} lines
             </span>
           </div>
           <div className="flex-1 overflow-hidden">
             <CodeInput
-              value={currentScene.sourceWithMarkup}
+              value={visibleSource}
               onChange={handleCodeChange}
               language={currentScene.language}
               codeThemeId={currentScene.codeThemeId}
+              skin={currentSkin}
+              typography={currentScene.typography}
+              appearance={sceneModel?.appearance}
             />
           </div>
           <MarkupLintPanel source={currentScene.sourceWithMarkup} />
@@ -272,9 +278,12 @@ function App() {
               </div>
               <div className="flex-1">
                 <CodeInput
-                  value={currentScene.sourceWithMarkup}
+                  value={visibleSource}
                   onChange={handleCodeChange}
                   language={currentScene.language}
+                  codeThemeId={currentScene.codeThemeId}
+                  skin={currentSkin}
+                  typography={currentScene.typography}
                 />
               </div>
             </div>
