@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { platformPresets } from '@/data/platformPresets';
 import { selectExporter } from '@/core/export';
-import { resolveSceneRenderModel } from '@/core/render/sceneModel';
+import { resolveSceneRenderModel, resizeSceneAppearance } from '@/core/render/sceneModel';
 import type { ExportFormat } from '@/core/types';
 
 export function ExportPanel() {
@@ -114,7 +114,8 @@ export function ExportPanel() {
           windowChrome: sceneModel.windowChrome,
           typography: sceneModel.typography,
           skin: sceneModel.skin,
-          appearance: sceneModel.appearance,
+          appearance: resizeSceneAppearance(sceneModel, exportWidth, exportHeight),
+          audio: sceneModel.audio,
           width: exportWidth,
           height: exportHeight,
           fps,
@@ -207,7 +208,7 @@ export function ExportPanel() {
           ))}
         </div>
         <div className="text-[10px] text-[var(--text-muted)]">
-          {format === 'mp4' && bestTier !== 'webcodecs' && 'Note: MP4 fallback to WebM via MediaRecorder in this browser.'}
+          {format === 'mp4' && bestTier !== 'webcodecs' && 'MP4 uses the compatible H.264 fallback encoder in this browser.'}
         </div>
       </div>
 

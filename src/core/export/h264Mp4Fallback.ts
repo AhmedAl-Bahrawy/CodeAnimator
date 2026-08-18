@@ -103,8 +103,8 @@ export async function h264Mp4FallbackExporter(
     encoder.width = encodeWidth;
     encoder.height = encodeHeight;
     encoder.frameRate = fps;
-    encoder.kbps = 8_000;
-    encoder.speed = 6;
+    encoder.kbps = 6_000;
+    encoder.speed = 10;
     encoder.groupOfPictures = Math.max(1, fps * 2);
     encoder.initialize();
 

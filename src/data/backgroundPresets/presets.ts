@@ -2,6 +2,13 @@ import type { BackgroundPreset } from '@/core/types';
 
 export const backgroundPresets: BackgroundPreset[] = [
   {
+    id: 'khwarizm-space',
+    name: 'Khwarizm Space',
+    type: 'gradient',
+    value: 'linear-gradient(135deg, #061A3A 0%, #092557 48%, #167BDB 100%)',
+    animated: true,
+  },
+  {
     id: 'mesh-gradient-1',
     name: 'Mesh Gradient (Purple)',
     type: 'gradient',

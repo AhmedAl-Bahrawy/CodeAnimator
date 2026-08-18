@@ -13,6 +13,9 @@ export type TimelineEventType =
   | 'clear-screen'
   | 'cut'
   | 'zoom'
+  | 'camera-shake'
+  | 'glitch'
+  | 'sound-cue'
   | 'scroll-to'
   | 'set-speed'
   | 'scene-transition';
@@ -88,6 +91,25 @@ export interface WindowChromeConfig {
 }
 
 // ====== Scene ======
+export type FramingMode = 'fit-code' | 'fill-canvas';
+export type MotionPreset = 'typewriter' | 'cinematic' | 'focus-reveal' | 'slide-in' | 'terminal-pulse';
+export type FxPreset = 'none' | 'academy-glow' | 'crt' | 'neon' | 'paper';
+export type SoundCueId = 'none' | 'key-tap' | 'soft-pop' | 'academy-chime' | 'terminal-beep';
+
+export interface ScenePresentationSettings {
+  framingMode: FramingMode;
+  maxZoom: number;
+  motionPreset: MotionPreset;
+  fxPreset: FxPreset;
+  fxIntensity: number;
+}
+
+export interface SceneAudioSettings {
+  enabled: boolean;
+  cueId: SoundCueId;
+  volume: number;
+}
+
 export interface Scene {
   id: string;
   language: string;
@@ -97,6 +119,8 @@ export interface Scene {
   windowChrome: WindowChromeConfig;
   typingConfig: TypingConfig;
   typography: TypographySettings;
+  presentation?: ScenePresentationSettings;
+  audio?: SceneAudioSettings;
 }
 
 // ====== Project ======
@@ -183,6 +207,7 @@ export interface ExportOptions {
   typography: TypographySettings;
   skin: UISkin;
   appearance: SceneAppearance;
+  audio?: SceneAudioSettings;
   width: number;
   height: number;
   fps: 30 | 60;
@@ -227,6 +252,16 @@ export interface SceneAppearance {
   contentPaddingPx: number;
   gutterWidthPx: number;
   titleBarHeightPx: number;
+  frameX: number;
+  frameY: number;
+  frameWidthPx: number;
+  frameHeightPx: number;
+  contentFitScale: number;
+  framingMode: FramingMode;
+  maxZoom: number;
+  fxPreset: FxPreset;
+  fxIntensity: number;
+  motionPreset: MotionPreset;
 }
 
 // ====== Rendering Layer Types ======
@@ -281,6 +316,7 @@ export interface UISkin {
 export interface BrandKit {
   id: string;
   name: string;
+  isBuiltIn?: boolean;
   uiSkinId: string;
   codeThemeId: string;
   backgroundPresetId: string;

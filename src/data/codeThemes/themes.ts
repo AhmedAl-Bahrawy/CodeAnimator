@@ -923,6 +923,23 @@ export const codeThemes: CodeTheme[] = [
   // ADDITIONAL RETRO TERMINAL
   // ═══════════════════════════════════════════════════════════════════
   {
+    id: 'khwarizm-academy',
+    name: 'Khwarizm Academy',
+    category: 'vibrant-social',
+    background: '#092557',
+    foreground: '#DCE5EE',
+    ansi: {
+      black: '#061A3A', red: '#D66B5D', green: '#29A9FF', yellow: '#E5B65C',
+      blue: '#167BDB', magenta: '#C88A32', cyan: '#29A9FF', white: '#DCE5EE',
+      brightBlack: '#8299B5', brightRed: '#E99585', brightGreen: '#67C6FF', brightYellow: '#F2D38E',
+      brightBlue: '#55B3FF', brightMagenta: '#E5B65C', brightCyan: '#8BD6FF', brightWhite: '#FFFFFF',
+    },
+    cursorColor: '#E5B65C',
+    lineNumberColor: '#8299B5',
+    selectionColor: '#E5B65C55',
+    shikiTheme: 'github-dark',
+  },
+  {
     id: 'commodore-64',
     name: 'Commodore 64',
     category: 'retro-terminal',

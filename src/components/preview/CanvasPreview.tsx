@@ -5,6 +5,7 @@ import { getStateAtTime } from '@/core/timeline/getStateAtTime';
 import { resolveSceneRenderModel } from '@/core/render/sceneModel';
 import { highlightCode, type HighlightResult } from '@/core/highlighting/shiki';
 import type { Timeline, CanvasState, CodeToken } from '@/core/types';
+import { playSoundCue } from '@/core/audio/soundLibrary';
 
 export function CanvasPreview() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,6 +51,8 @@ export function CanvasPreview() {
   const currentTimeRef = useRef(0);
   const timelineRef = useRef<Timeline | null>(null);
   const renderFnRef = useRef<((timeMs: number, forceFullSource?: boolean) => void) | null>(null);
+  const lastAudioTimeRef = useRef(0);
+  const lastSoundAtRef = useRef(0);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -169,6 +172,22 @@ export function CanvasPreview() {
       if (startTimestamp === null) startTimestamp = timestamp;
       const elapsed = timestamp - startTimestamp;
       const nextTime = (startOffset + elapsed) % totalDuration;
+      if (nextTime < currentTimeRef.current) lastAudioTimeRef.current = 0;
+      if (sceneModel?.audio.enabled && sceneModel.audio.cueId !== 'none') {
+        const previousTime = lastAudioTimeRef.current;
+        for (const event of timeline.events) {
+          if (event.tMs <= previousTime || event.tMs > nextTime) continue;
+          if (event.type === 'sound-cue') {
+            const cueId = (event.payload as { cueId?: typeof sceneModel.audio.cueId }).cueId || sceneModel.audio.cueId;
+            playSoundCue(cueId, sceneModel.audio.volume);
+            lastSoundAtRef.current = performance.now();
+          } else if ((event.type === 'type-char' || event.type === 'type-word' || event.type === 'type-line') && performance.now() - lastSoundAtRef.current > 42) {
+            playSoundCue(sceneModel.audio.cueId, sceneModel.audio.volume);
+            lastSoundAtRef.current = performance.now();
+          }
+        }
+        lastAudioTimeRef.current = nextTime;
+      }
       currentTimeRef.current = nextTime;
       renderFnRef.current?.(nextTime, false);
       if (isPlayingRef.current) animationRef.current = requestAnimationFrame(animate);

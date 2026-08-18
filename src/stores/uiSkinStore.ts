@@ -32,7 +32,15 @@ interface UISkinStore {
 export const useUISkinStore = create<UISkinStore>((set, get) => ({
   skins: uiSkins,
   currentSkinId: 'midnight',
-  brandKits: [],
+  brandKits: [{
+    id: 'khwarizm-academy',
+    name: 'Khwarizm Academy',
+    isBuiltIn: true,
+    uiSkinId: 'khwarizm-academy',
+    codeThemeId: 'khwarizm-academy',
+    backgroundPresetId: 'khwarizm-space',
+    defaultAspectRatio: '9:16',
+  }],
   currentBrandKitId: null,
 
   setSkin: (id) => {
@@ -118,7 +126,10 @@ export const useUISkinStore = create<UISkinStore>((set, get) => ({
         codeThemeId: kit.codeThemeId,
         backgroundPresetId: kit.backgroundPresetId,
       });
-      projectState.updateProject(project.id, { brandKitId: id });
+      projectState.updateProject(project.id, {
+        brandKitId: id,
+        aspectRatio: kit.defaultAspectRatio,
+      });
     }
   },
 

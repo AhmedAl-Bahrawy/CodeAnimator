@@ -52,17 +52,19 @@ export function BrandKitManager() {
                 <span className="text-sm text-[var(--text-primary)] font-medium">
                   {kit.name}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteBrandKit(kit.id);
-                  }}
-                  className="h-6 text-xs text-[var(--danger)]"
-                >
-                  Delete
-                </Button>
+                {!kit.isBuiltIn && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteBrandKit(kit.id);
+                    }}
+                    className="h-6 text-xs text-[var(--danger)]"
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
               <div className="flex gap-2 mt-1">
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-base)] text-[var(--text-muted)]">

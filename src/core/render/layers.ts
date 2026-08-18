@@ -26,14 +26,10 @@ export function drawBackground(ctx: RenderContext): void {
 // ====== Layer 2: Outer Margin ======
 export function drawMargin(ctx: RenderContext): void {
   const { ctx: c, width, height, windowChrome, skin } = ctx;
-  const m = windowChrome.margin;
-  if (m <= 0) return;
+  const { frameX, frameY, frameW, frameH } = getFrameGeometry(ctx);
+  if (frameX <= 0 && frameY <= 0) return;
 
-  // Draw margin as a ring around the window frame, not a translucent overlay
-  const frameX = m;
-  const frameY = m;
-  const frameW = width - m * 2;
-  const frameH = height - m * 2;
+  // Draw margin as a ring around the canonical adaptive frame, not a translucent overlay
   const r = windowChrome.borderRadius;
 
   c.save();
@@ -49,23 +45,28 @@ export function drawMargin(ctx: RenderContext): void {
 
 // ====== Helper: Compute frame geometry ======
 function getFrameGeometry(ctx: RenderContext) {
-  const { width, height, windowChrome, appearance } = ctx;
-  const m = windowChrome.margin;
-  const titleBarHeight = appearance.titleBarHeightPx;
-  const lineHeight = appearance.lineHeightPx;
+  const { appearance } = ctx;
+  const fit = appearance.contentFitScale;
+  const titleBarHeight = appearance.titleBarHeightPx * fit;
+  const lineHeight = appearance.lineHeightPx * fit;
+
+  const frameX = appearance.frameX;
+  const frameY = appearance.frameY;
+  const frameW = appearance.frameWidthPx;
+  const frameH = appearance.frameHeightPx;
 
   return {
-    frameX: m,
-    frameY: m,
-    frameW: width - m * 2,
-    frameH: height - m * 2,
-    contentX: m,
-    contentY: m + titleBarHeight,
-    contentW: width - m * 2,
-    contentH: height - m * 2 - titleBarHeight,
+    frameX,
+    frameY,
+    frameW,
+    frameH,
+    contentX: frameX,
+    contentY: frameY + titleBarHeight,
+    contentW: frameW,
+    contentH: Math.max(1, frameH - titleBarHeight),
     titleBarHeight,
-    codeX: m + appearance.gutterWidthPx + appearance.contentPaddingPx,
-    codeY: m + titleBarHeight + appearance.contentPaddingPx,
+    codeX: frameX + (appearance.gutterWidthPx + appearance.contentPaddingPx) * fit,
+    codeY: frameY + titleBarHeight + appearance.contentPaddingPx * fit,
     lineHeight,
   };
 }
@@ -82,7 +83,7 @@ export function drawWindowFrame(ctx: RenderContext): void {
     c.shadowBlur = 24;
     c.shadowOffsetX = 0;
     c.shadowOffsetY = 8;
-    c.fillStyle = theme.background;
+    c.fillStyle = ctx.appearance.codeBackground;
     c.beginPath();
     c.roundRect(frameX, frameY, frameW, frameH, windowChrome.borderRadius);
     c.fill();
@@ -91,14 +92,14 @@ export function drawWindowFrame(ctx: RenderContext): void {
 
   // Title bar background
   if (windowChrome.style !== 'none') {
-    c.fillStyle = skin.tokens.bgElevated || adjustBrightness(theme.background, -12);
+    c.fillStyle = skin.tokens.bgElevated || ctx.appearance.codeBackground || adjustBrightness(theme.background, -12);
     c.beginPath();
     c.roundRect(frameX, frameY, frameW, titleBarHeight,
       [windowChrome.borderRadius, windowChrome.borderRadius, 0, 0]);
     c.fill();
 
     // Separator line
-    c.strokeStyle = adjustBrightness(theme.background, 20);
+    c.strokeStyle = ctx.appearance.border || adjustBrightness(theme.background, 20);
     c.lineWidth = 1;
     c.beginPath();
     c.moveTo(frameX, frameY + titleBarHeight);
@@ -117,7 +118,7 @@ export function drawWindowFrame(ctx: RenderContext): void {
 
   // Title text (for non-terminal styles)
   if (windowChrome.title && windowChrome.style !== 'terminal') {
-    c.fillStyle = theme.foreground;
+    c.fillStyle = ctx.appearance.codeForeground;
     c.globalAlpha = 0.5;
     c.font = `12px ${ctx.appearance.monoFontFamily}`;
     c.textAlign = 'center';
@@ -202,16 +203,17 @@ export function drawCodeSurface(ctx: RenderContext): void {
 export function drawLineNumbers(ctx: RenderContext, visibleLines: string[]): void {
   const { ctx: c, state, appearance } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = appearance.contentPaddingPx;
-  const scrollY = state.scrollOffsetPx || 0;
+  const fit = appearance.contentFitScale;
+  const padding = appearance.contentPaddingPx * fit;
+  const scrollY = (state.scrollOffsetPx || 0) * fit;
 
   c.fillStyle = appearance.gutterForeground;
-  c.font = `${Math.max(8, appearance.fontSizePx - 1)}px ${appearance.monoFontFamily}`;
+  c.font = `${Math.max(8, (appearance.fontSizePx - 1) * fit)}px ${appearance.monoFontFamily}`;
   c.textAlign = 'right';
 
   for (let i = 0; i < visibleLines.length; i++) {
     const y = contentY + padding + i * lineHeight + lineHeight * 0.82 + scrollY;
-    c.fillText(String(i + 1), contentX + appearance.gutterWidthPx - 10, y);
+    c.fillText(String(i + 1), contentX + appearance.gutterWidthPx * fit - 10 * fit, y);
   }
 
   c.textAlign = 'left';
@@ -225,15 +227,16 @@ export function drawCodeText(
 ): void {
   const { ctx: c, state, appearance } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = appearance.contentPaddingPx;
-  const scrollY = state.scrollOffsetPx || 0;
+  const fit = appearance.contentFitScale;
+  const padding = appearance.contentPaddingPx * fit;
+  const scrollY = (state.scrollOffsetPx || 0) * fit;
 
-  c.font = `${appearance.fontSizePx}px ${appearance.monoFontFamily}`;
-  c.letterSpacing = `${appearance.letterSpacingPx}px`;
+  c.font = `${appearance.fontSizePx * fit}px ${appearance.monoFontFamily}`;
+  c.letterSpacing = `${appearance.letterSpacingPx * fit}px`;
 
   for (let lineIdx = 0; lineIdx < visibleLines.length; lineIdx++) {
     const y = contentY + padding + lineIdx * lineHeight + lineHeight * 0.82 + scrollY;
-    const x = contentX + appearance.gutterWidthPx;
+    const x = contentX + (appearance.gutterWidthPx + appearance.contentPaddingPx) * fit;
 
     if (tokenLines && tokenLines[lineIdx]) {
       let xPos = x;
@@ -323,36 +326,43 @@ export function drawCursor(ctx: RenderContext): void {
 
 // ====== Layer 9: FX Layer ======
 export function drawFX(ctx: RenderContext): void {
-  const { ctx: c, width, height, windowChrome, frameIndex, fps } = ctx;
+  const { ctx: c, width, height, windowChrome, frameIndex, fps, appearance } = ctx;
+  const intensity = Math.max(0, Math.min(1, appearance.fxIntensity));
+  if (appearance.fxPreset === 'none' && windowChrome.style !== 'terminal') return;
 
-  // Only apply FX for terminal-style window chrome
-  if (windowChrome.style !== 'terminal') return;
+  const isCrt = appearance.fxPreset === 'crt' || windowChrome.style === 'terminal';
+  const isAcademy = appearance.fxPreset === 'academy-glow';
+  const isNeon = appearance.fxPreset === 'neon';
+  const isPaper = appearance.fxPreset === 'paper';
 
-  // Scanlines — subtle horizontal lines
-  c.fillStyle = 'rgba(0, 0, 0, 0.04)';
-  for (let y = 0; y < height; y += 3) {
-    c.fillRect(0, y, width, 1);
+  if (isCrt) {
+    c.fillStyle = `rgba(0, 0, 0, ${0.04 * intensity})`;
+    for (let y = 0; y < height; y += 3) c.fillRect(0, y, width, 1);
+    const vignette = c.createRadialGradient(width / 2, height / 2, width * 0.3, width / 2, height / 2, width * 0.8);
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vignette.addColorStop(1, `rgba(0, 0, 0, ${0.25 * intensity})`);
+    c.fillStyle = vignette;
+    c.fillRect(0, 0, width, height);
   }
 
-  // CRT vignette — dark edges
-  const vignette = c.createRadialGradient(
-    width / 2, height / 2, width * 0.3,
-    width / 2, height / 2, width * 0.8
-  );
-  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
-  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.25)');
-  c.fillStyle = vignette;
-  c.fillRect(0, 0, width, height);
+  if (isAcademy || isNeon) {
+    const glow = c.createRadialGradient(width / 2, height * 0.35, 0, width / 2, height * 0.35, Math.max(width, height) * 0.7);
+    const glowColor = isAcademy ? '229, 182, 92' : '41, 169, 255';
+    glow.addColorStop(0, `rgba(${glowColor}, ${0.09 * intensity})`);
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    c.fillStyle = glow;
+    c.fillRect(0, 0, width, height);
+  }
 
-  // Subtle phosphor glow — green tint for terminal style
-  c.fillStyle = 'rgba(0, 255, 65, 0.015)';
-  c.fillRect(0, 0, width, height);
+  if (isPaper) {
+    c.fillStyle = `rgba(255, 255, 255, ${0.035 * intensity})`;
+    c.fillRect(0, 0, width, height);
+  }
 
-  // CRT flicker — very subtle brightness oscillation (deterministic)
-  const blinkCycle = fps * 4; // flicker every 4 seconds
+  const blinkCycle = Math.max(1, fps * 4);
   const flickerPhase = (frameIndex % blinkCycle) / blinkCycle;
-  const flickerAlpha = 0.008 * Math.sin(flickerPhase * Math.PI * 2);
-  if (flickerAlpha > 0) {
+  const flickerAlpha = 0.008 * intensity * Math.sin(flickerPhase * Math.PI * 2);
+  if (isCrt && flickerAlpha > 0) {
     c.fillStyle = `rgba(255, 255, 255, ${flickerAlpha})`;
     c.fillRect(0, 0, width, height);
   }

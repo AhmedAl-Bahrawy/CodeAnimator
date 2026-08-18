@@ -36,6 +36,8 @@ export interface SceneRenderModel {
   height: number;
   timeline: Timeline;
   appearance: SceneAppearance;
+  presentation: NonNullable<Scene['presentation']>;
+  audio: NonNullable<Scene['audio']>;
 }
 
 export function resolveDimensions(
@@ -61,6 +63,60 @@ export function getSkinById(id: string | undefined, skins: UISkin[] = []): UISki
   return skins.find((skin) => skin.id === id) || getUISkinById(id || 'midnight');
 }
 
+const defaultPresentation: NonNullable<Scene['presentation']> = {
+  framingMode: 'fit-code',
+  maxZoom: 1.65,
+  motionPreset: 'typewriter',
+  fxPreset: 'none',
+  fxIntensity: 0.55,
+};
+
+const defaultAudio: NonNullable<Scene['audio']> = {
+  enabled: false,
+  cueId: 'none',
+  volume: 0.35,
+};
+
+function resolveAdaptiveFrame(
+  width: number,
+  height: number,
+  source: string,
+  appearance: Pick<SceneAppearance, 'fontSizePx' | 'lineHeightPx' | 'letterSpacingPx' | 'contentPaddingPx' | 'gutterWidthPx' | 'titleBarHeightPx'>,
+  windowChrome: WindowChromeConfig,
+  presentation: NonNullable<Scene['presentation']>,
+): Pick<SceneAppearance, 'frameX' | 'frameY' | 'frameWidthPx' | 'frameHeightPx' | 'contentFitScale'> {
+  const lines = source.split('\n');
+  const longestLine = Math.max(1, ...lines.map(line => line.length));
+  const estimatedCharWidth = Math.max(5, appearance.fontSizePx * 0.61 + appearance.letterSpacingPx);
+  const baseWidth = Math.max(240, appearance.gutterWidthPx + appearance.contentPaddingPx * 2 + longestLine * estimatedCharWidth);
+  const baseHeight = Math.max(appearance.lineHeightPx * 2, lines.length * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx);
+  const availableWidth = Math.max(1, width - windowChrome.margin * 2);
+  const availableHeight = Math.max(1, height - windowChrome.margin * 2);
+  const fitScale = Math.min(availableWidth / baseWidth, availableHeight / baseHeight);
+  const contentFitScale = presentation.framingMode === 'fill-canvas'
+    ? 1
+    : Math.min(fitScale, Math.max(1, presentation.maxZoom));
+  const frameWidthPx = Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
+  const frameHeightPx = Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
+
+  return {
+    frameX: Math.round((width - frameWidthPx) / 2),
+    frameY: Math.round((height - frameHeightPx) / 2),
+    frameWidthPx,
+    frameHeightPx,
+    contentFitScale,
+  };
+}
+
+export function resizeSceneAppearance(
+  model: Pick<SceneRenderModel, 'source' | 'appearance' | 'windowChrome' | 'presentation'>,
+  width: number,
+  height: number,
+): SceneAppearance {
+  const frame = resolveAdaptiveFrame(width, height, model.source, model.appearance, model.windowChrome, model.presentation);
+  return { ...model.appearance, ...frame };
+}
+
 export function resolveSceneRenderModel(
   project: Project,
   scene: Scene,
@@ -73,10 +129,12 @@ export function resolveSceneRenderModel(
   const skin = options.skin || getSkinById(undefined, options.skins);
   const dimensions = resolveDimensions(project.aspectRatio, project.customWidth, project.customHeight);
   const fps: 30 | 60 = options.fps === 60 ? 60 : 30;
-  const appearance: SceneAppearance = {
-    codeBackground: theme.background || skin.tokens.bgElevated,
+  const presentation = { ...defaultPresentation, ...(scene.presentation || {}) };
+  const audio = { ...defaultAudio, ...(scene.audio || {}) };
+  const baseAppearance = {
+    codeBackground: skin.tokens.bgElevated || theme.background || skin.tokens.bgPanel,
     codeForeground: theme.foreground || skin.tokens.textPrimary,
-    gutterBackground: theme.background || skin.tokens.bgElevated,
+    gutterBackground: skin.tokens.bgPanel || theme.background,
     gutterForeground: theme.lineNumberColor || skin.tokens.textMuted,
     activeLineBackground: skin.tokens.bgPanel,
     border: skin.tokens.border,
@@ -90,6 +148,16 @@ export function resolveSceneRenderModel(
     contentPaddingPx: Math.max(0, scene.windowChrome.padding),
     gutterWidthPx: 52,
     titleBarHeightPx: scene.windowChrome.style === 'none' ? 0 : 38,
+  };
+  const frame = resolveAdaptiveFrame(dimensions.width, dimensions.height, parsed.cleanSource, baseAppearance, scene.windowChrome, presentation);
+  const appearance: SceneAppearance = {
+    ...baseAppearance,
+    ...frame,
+    framingMode: presentation.framingMode,
+    maxZoom: presentation.maxZoom,
+    fxPreset: presentation.fxPreset,
+    fxIntensity: presentation.fxIntensity,
+    motionPreset: presentation.motionPreset,
   };
   const timeline = buildTimelineFromSource({
     source: parsed.cleanSource,
@@ -115,6 +183,8 @@ export function resolveSceneRenderModel(
     ...dimensions,
     timeline,
     appearance,
+    presentation,
+    audio,
   };
 }
 

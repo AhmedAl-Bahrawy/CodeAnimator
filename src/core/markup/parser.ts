@@ -139,9 +139,9 @@ function convertTokenToEvent(
     case 'scene':
       return { tMs: 0, type: 'scene-transition', payload: { action: value }, lineIndex };
     case 'glitch':
-      return { tMs: 0, type: 'zoom', payload: { level: 1.02 }, lineIndex };
+      return { tMs: 0, type: 'camera-shake', payload: { intensity: 0.08, durationMs: 220 }, lineIndex };
     case 'beep':
-      return null;
+      return { tMs: 0, type: 'sound-cue', payload: { cueId: 'terminal-beep' }, lineIndex };
     default:
       return null;
   }

@@ -49,6 +49,20 @@ const defaultTypography: TypographySettings = {
   letterSpacing: 0,
 };
 
+const defaultPresentation = {
+  framingMode: 'fit-code' as const,
+  maxZoom: 1.65,
+  motionPreset: 'typewriter' as const,
+  fxPreset: 'none' as const,
+  fxIntensity: 0.55,
+};
+
+const defaultAudio = {
+  enabled: false,
+  cueId: 'none' as const,
+  volume: 0.35,
+};
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [],
   currentProjectId: null,
@@ -69,6 +83,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         windowChrome: { ...defaultWindowChrome },
         typingConfig: { ...defaultTypingConfig },
         typography: { ...defaultTypography },
+        presentation: { ...defaultPresentation },
+        audio: { ...defaultAudio },
       }],
       aspectRatio: '9:16',
     };
@@ -134,6 +150,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
           windowChrome: { ...defaultWindowChrome },
           typingConfig: { ...defaultTypingConfig },
           typography: { ...defaultTypography },
+          presentation: { ...defaultPresentation },
+          audio: { ...defaultAudio },
         }],
       };
     }),

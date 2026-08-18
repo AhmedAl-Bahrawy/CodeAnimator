@@ -35,14 +35,23 @@ export function renderFrame(options: RenderFrameOptions): void {
 
   ctx.clearRect(0, 0, width, height);
 
-  // Apply zoom transform
+  // Apply canonical zoom plus deterministic scene motion.
   const zoom = state.zoomLevel || 1;
-  if (zoom !== 1) {
+  const motionProgress = Math.min(1, frameIndex / Math.max(1, fps * 0.8));
+  const motion = appearance.motionPreset;
+  const motionScale = motion === 'cinematic'
+    ? 0.985 + Math.sin(frameIndex / Math.max(1, fps * 1.8)) * 0.012
+    : motion === 'terminal-pulse'
+      ? 1 + Math.sin(frameIndex / Math.max(1, fps * 0.45)) * 0.006
+      : 1;
+  const motionY = motion === 'slide-in' ? (1 - motionProgress) * 42 : 0;
+  const motionX = motion === 'focus-reveal' ? Math.sin(frameIndex / Math.max(1, fps * 0.7)) * 3 : 0;
+  if (zoom !== 1 || motionScale !== 1 || motionX !== 0 || motionY !== 0) {
     ctx.save();
     const cx = width / 2;
     const cy = height / 2;
-    ctx.translate(cx, cy);
-    ctx.scale(zoom, zoom);
+    ctx.translate(cx + motionX, cy + motionY);
+    ctx.scale(zoom * motionScale, zoom * motionScale);
     ctx.translate(-cx, -cy);
   }
 
@@ -98,8 +107,8 @@ export function renderFrame(options: RenderFrameOptions): void {
   // Layer 10: Watermark
   drawWatermark(renderCtx);
 
-  // Reset transform if zoom was applied
-  if (zoom !== 1) {
+  // Reset transform if any camera motion was applied
+  if (zoom !== 1 || motionScale !== 1 || motionX !== 0 || motionY !== 0) {
     ctx.restore();
   }
 }

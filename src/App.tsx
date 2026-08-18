@@ -9,6 +9,7 @@ import { BackgroundPicker } from './components/style/BackgroundPicker';
 import { WindowChromeControls } from './components/style/WindowChromeControls';
 import { TypingBehaviorControls } from './components/style/TypingBehaviorControls';
 import { TypographyControls } from './components/style/TypographyControls';
+import { PresentationControls } from './components/style/PresentationControls';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
 import { useProjectStore, useTimelineStore, useUISkinStore, useThemeStore } from './stores';
@@ -156,6 +157,20 @@ function App() {
     });
   }, [currentProject, currentScene, currentSceneIndex, updateScene]);
 
+  const handlePresentationChange = useCallback((updates: Record<string, unknown>) => {
+    if (!currentProject || !currentScene || !sceneModel) return;
+    updateScene(currentProject.id, currentSceneIndex, {
+      presentation: { ...sceneModel.presentation, ...updates },
+    });
+  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
+
+  const handleAudioChange = useCallback((updates: Record<string, unknown>) => {
+    if (!currentProject || !currentScene || !sceneModel) return;
+    updateScene(currentProject.id, currentSceneIndex, {
+      audio: { ...sceneModel.audio, ...updates },
+    });
+  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
+
   const handleAspectRatioChange = useCallback((value: string) => {
     if (!currentProject) return;
     useProjectStore.getState().updateProject(currentProject.id, { aspectRatio: value as '9:16' | '1:1' | '16:9' | 'custom' });
@@ -246,6 +261,14 @@ function App() {
                   settings={currentScene.typography}
                   onChange={(updates) => handleTypographyChange(updates)}
                 />
+                {sceneModel && (
+                  <PresentationControls
+                    presentation={sceneModel.presentation}
+                    audio={sceneModel.audio}
+                    onPresentationChange={handlePresentationChange}
+                    onAudioChange={handleAudioChange}
+                  />
+                )}
                 <AspectRatioSelector
                   value={currentProject?.aspectRatio || '9:16'}
                   onChange={handleAspectRatioChange}
@@ -303,6 +326,14 @@ function App() {
                 config={currentScene.typingConfig}
                 onChange={handleTypingChange}
               />
+              {sceneModel && (
+                <PresentationControls
+                  presentation={sceneModel.presentation}
+                  audio={sceneModel.audio}
+                  onPresentationChange={handlePresentationChange}
+                  onAudioChange={handleAudioChange}
+                />
+              )}
             </div>
           )}
           {mobileTab === 'preview' && (
