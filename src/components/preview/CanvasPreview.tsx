@@ -65,12 +65,17 @@ export function CanvasPreview() {
   }, [timeline]);
 
   const [highlightResult, setHighlightResult] = useState<HighlightResult | null>(null);
+  const [highlightKey, setHighlightKey] = useState('');
+  const expectedHighlightKey = sceneModel
+    ? `${sceneModel.language}:${sceneModel.theme.shikiTheme || sceneModel.theme.id}:${sceneModel.source}`
+    : '';
   useEffect(() => {
     if (!sceneModel) return;
     const cacheKey = `${sceneModel.language}:${sceneModel.theme.shikiTheme || sceneModel.theme.id}:${sceneModel.source}`;
     const cached = highlightCacheRef.current.get(cacheKey);
     if (cached) {
       setHighlightResult(cached);
+      setHighlightKey(cacheKey);
       return;
     }
 
@@ -80,6 +85,7 @@ export function CanvasPreview() {
         if (cancelled) return;
         highlightCacheRef.current.set(cacheKey, result);
         setHighlightResult(result);
+        setHighlightKey(cacheKey);
       })
       .catch((error) => {
         if (!cancelled) console.warn('Syntax highlighting failed:', error);
@@ -90,11 +96,11 @@ export function CanvasPreview() {
   }, [sceneModel]);
 
   const tokenLines = useMemo<CodeToken[][] | null>(() => {
-    if (!highlightResult) return null;
+    if (!highlightResult || highlightKey !== expectedHighlightKey) return null;
     return highlightResult.lines.map((line) =>
       line.tokens.map((token) => ({ content: token.content, color: token.color, offset: token.offset })),
     );
-  }, [highlightResult]);
+  }, [expectedHighlightKey, highlightKey, highlightResult]);
 
   useEffect(() => {
     if (!containerRef.current) return;
