@@ -44,8 +44,12 @@ export const webCodecsExporter: Exporter = {
 
     onProgress(2);
     const mp4Codec = 'avc1.42001e';
-    const webmCodec = 'vp09.00.10.08';
+    const webmCodecCandidates = [
+      { encoderCodec: 'vp09.00.10.08', muxerCodec: 'V_VP9' },
+      { encoderCodec: 'vp8', muxerCodec: 'V_VP8' },
+    ] as const;
     let codec: string;
+    let webmMuxerCodec = 'V_VP9';
 
     if (format === 'mp4') {
       if (!(await checkCodecSupport(mp4Codec, width, height, fps))) {
@@ -53,13 +57,21 @@ export const webCodecsExporter: Exporter = {
       }
       codec = mp4Codec;
     } else {
-      if (!(await checkCodecSupport(webmCodec, width, height, fps))) {
+      let supportedWebmCodec: (typeof webmCodecCandidates)[number] | null = null;
+      for (const candidate of webmCodecCandidates) {
+        if (await checkCodecSupport(candidate.encoderCodec, width, height, fps)) {
+          supportedWebmCodec = candidate;
+          break;
+        }
+      }
+      if (!supportedWebmCodec) {
         if (mediaRecorderExporter.isSupported) {
           return mediaRecorderExporter.export(opts, onProgress, signal);
         }
-        throw new Error('This browser cannot encode VP9 WebM. Choose MP4, GIF, or use a browser with VP9 WebCodecs support.');
+        throw new Error('This browser cannot encode VP8 or VP9 WebM. Choose MP4, GIF, or use a browser with WebCodecs support.');
       }
-      codec = webmCodec;
+      codec = supportedWebmCodec.encoderCodec;
+      webmMuxerCodec = supportedWebmCodec.muxerCodec;
     }
 
     onProgress(3);
@@ -108,7 +120,7 @@ export const webCodecsExporter: Exporter = {
     const webmMuxer = webmTarget
       ? new WebmMuxer({
           target: webmTarget,
-          video: { codec: 'V_VP9', width, height, frameRate: fps },
+          video: { codec: webmMuxerCodec, width, height, frameRate: fps },
           firstTimestampBehavior: 'offset',
         })
       : null;

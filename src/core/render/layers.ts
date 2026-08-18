@@ -288,19 +288,20 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
 export function drawCursor(ctx: RenderContext): void {
   const { ctx: c, state, appearance, typingConfig, frameIndex, fps } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
-  const padding = appearance.contentPaddingPx;
-  const scrollY = state.scrollOffsetPx || 0;
+  const fit = appearance.contentFitScale;
+  const padding = appearance.contentPaddingPx * fit;
+  const scrollY = (state.scrollOffsetPx || 0) * fit;
 
-  const blinkCycle = Math.round(fps * (typingConfig.cursorBlinkRate || 0.7));
+  const blinkCycle = Math.max(1, Math.round(fps * Math.max(0.1, typingConfig.cursorBlinkRate || 0.7)));
   const blinkFrame = frameIndex % blinkCycle;
   const isVisible = blinkFrame < blinkCycle / 2;
   if (!isVisible) return;
 
-  c.font = `${appearance.fontSizePx}px ${appearance.monoFontFamily}`;
-  const charWidth = c.measureText('M').width + appearance.letterSpacingPx;
-  const cursorX = contentX + appearance.gutterWidthPx + state.cursorCol * charWidth;
+  c.font = `${appearance.fontSizePx * fit}px ${appearance.monoFontFamily}`;
+  const charWidth = c.measureText('M').width + appearance.letterSpacingPx * fit;
+  const cursorX = contentX + (appearance.gutterWidthPx + appearance.contentPaddingPx) * fit + state.cursorCol * charWidth;
   const cursorY = contentY + padding + state.cursorLine * lineHeight + scrollY;
-  const cursorH = lineHeight - 4;
+  const cursorH = Math.max(2, lineHeight - 4 * fit);
 
   c.fillStyle = appearance.cursorColor;
 
@@ -313,12 +314,12 @@ export function drawCursor(ctx: RenderContext): void {
       break;
     }
     case 'underscore': {
-      c.fillRect(cursorX, cursorY + lineHeight - 4, charWidth, 3);
+      c.fillRect(cursorX, cursorY + lineHeight - 4 * fit, charWidth, Math.max(1, 3 * fit));
       break;
     }
     case 'bar':
     default: {
-      c.fillRect(cursorX, cursorY + 2, 3, cursorH);
+      c.fillRect(cursorX, cursorY + 2 * fit, Math.max(1, 3 * fit), cursorH);
       break;
     }
   }

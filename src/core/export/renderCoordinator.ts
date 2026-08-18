@@ -52,6 +52,7 @@ export class RenderCoordinator {
   private failed = false;
   private failError: Error | null = null;
   private cancelled = false;
+  private dispatchMore: (() => void) | null = null;
 
   constructor(opts: RenderCoordinatorOptions) {
     this.speedMultiplier = Math.max(0.1, opts.speedMultiplier ?? 1);
@@ -110,7 +111,13 @@ export class RenderCoordinator {
       case 'frame-ready': {
         this.frameQueue.set(msg.frameIndex, msg.bitmap);
         this.onFrameReady?.(msg.frameIndex);
-        this.resolveWaiter?.();
+        // Worker rendering uses asynchronous bitmap conversion, so frame-ready
+        // messages can arrive out of order. Only wake nextFrame() when the
+        // exact frame it is waiting for is available; otherwise an out-of-order
+        // frame could be interpreted as end-of-stream and produce empty media.
+        if (this.frameQueue.has(this.nextFrameToYield)) {
+          this.resolveWaiter?.();
+        }
         break;
       }
 
@@ -143,7 +150,10 @@ export class RenderCoordinator {
     };
     dispatchNext();
 
-    // Patch onFrameReady to dispatch more
+    // Patch onFrameReady to dispatch more. The consumer also invokes this
+    // after yielding a frame because all prefetched frames may arrive before
+    // nextFrame() advances the consumption cursor.
+    this.dispatchMore = dispatchNext;
     const origOnFrame = this.onFrameReady;
     this.onFrameReady = (idx) => {
       origOnFrame?.(idx);
@@ -162,10 +172,11 @@ export class RenderCoordinator {
     // Check if already queued
     const queued = this.frameQueue.get(this.nextFrameToYield);
     if (queued) {
-      this.frameQueue.delete(this.nextFrameToYield);
-      const idx = this.nextFrameToYield;
-      this.nextFrameToYield++;
-      return { frameIndex: idx, bitmap: queued };
+          this.frameQueue.delete(this.nextFrameToYield);
+          const idx = this.nextFrameToYield;
+          this.nextFrameToYield++;
+          this.dispatchMore?.();
+          return { frameIndex: idx, bitmap: queued };
     }
 
     // Check if done
@@ -187,6 +198,7 @@ export class RenderCoordinator {
           this.frameQueue.delete(this.nextFrameToYield);
           const idx = this.nextFrameToYield;
           this.nextFrameToYield++;
+          this.dispatchMore?.();
           resolve({ frameIndex: idx, bitmap: bmp });
         } else {
           resolve(null);
@@ -202,6 +214,7 @@ export class RenderCoordinator {
 
   cancel(): void {
     this.cancelled = true;
+    this.dispatchMore = null;
     this.post({ type: 'cancel' });
     this.worker.terminate();
     // Clean up any queued bitmaps
@@ -212,6 +225,7 @@ export class RenderCoordinator {
   }
 
   terminate(): void {
+    this.dispatchMore = null;
     this.worker.terminate();
     for (const bmp of this.frameQueue.values()) {
       bmp.close();

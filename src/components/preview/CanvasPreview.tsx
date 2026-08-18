@@ -12,6 +12,10 @@ export function CanvasPreview() {
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>(0);
   const [scale, setScale] = useState(0.3);
+  const [workspaceZoom, setWorkspaceZoom] = useState(1);
+  const [workspacePan, setWorkspacePan] = useState({ x: 0, y: 0 });
+  const [isDraggingWorkspace, setIsDraggingWorkspace] = useState(false);
+  const workspaceDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const highlightCacheRef = useRef<Map<string, HighlightResult>>(new Map());
 
   const currentProject = useProjectStore((state) =>
@@ -173,16 +177,21 @@ export function CanvasPreview() {
     const totalDuration = timeline.totalDurationMs;
     let startTimestamp: number | null = null;
     const startOffset = currentTimeRef.current;
+    lastAudioTimeRef.current = startOffset;
+    lastSoundAtRef.current = 0;
 
     const animate = (timestamp: number) => {
       if (startTimestamp === null) startTimestamp = timestamp;
       const elapsed = timestamp - startTimestamp;
       const nextTime = (startOffset + elapsed) % totalDuration;
-      if (nextTime < currentTimeRef.current) lastAudioTimeRef.current = 0;
       if (sceneModel?.audio.enabled && sceneModel.audio.cueId !== 'none') {
         const previousTime = lastAudioTimeRef.current;
+        const wrapped = nextTime < previousTime;
+        const crossed = (eventTime: number) => wrapped
+          ? eventTime > previousTime || eventTime <= nextTime
+          : eventTime > previousTime && eventTime <= nextTime;
         for (const event of timeline.events) {
-          if (event.tMs <= previousTime || event.tMs > nextTime) continue;
+          if (!crossed(event.tMs)) continue;
           if (event.type === 'sound-cue') {
             const cueId = (event.payload as { cueId?: typeof sceneModel.audio.cueId }).cueId || sceneModel.audio.cueId;
             playSoundCue(cueId, sceneModel.audio.volume);
@@ -239,8 +248,74 @@ export function CanvasPreview() {
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-3">
-      <div ref={containerRef} className="flex-1 min-h-0 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden">
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      <div
+        ref={containerRef}
+        className="relative flex-1 min-h-0 flex items-center justify-center bg-[var(--bg-base)] rounded-lg overflow-hidden"
+        style={{ touchAction: 'none' }}
+        onWheel={(event) => {
+          const direction = event.deltaY < 0 ? 1 : -1;
+          setWorkspaceZoom((current) => Math.min(4, Math.max(0.25, current + direction * 0.1)));
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setIsDraggingWorkspace(true);
+          workspaceDragRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: workspacePan.x,
+            originY: workspacePan.y,
+          };
+        }}
+        onPointerMove={(event) => {
+          const drag = workspaceDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          setWorkspacePan({
+            x: drag.originX + event.clientX - drag.startX,
+            y: drag.originY + event.clientY - drag.startY,
+          });
+        }}
+        onPointerUp={(event) => {
+          if (workspaceDragRef.current?.pointerId === event.pointerId) {
+            workspaceDragRef.current = null;
+            setIsDraggingWorkspace(false);
+          }
+        }}
+        onPointerCancel={() => { workspaceDragRef.current = null; setIsDraggingWorkspace(false); }}
+      >
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--bg-panel)]/90 p-1 shadow-lg backdrop-blur-sm">
+          <button
+            type="button"
+            className="h-7 w-7 rounded text-sm text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
+            onClick={() => setWorkspaceZoom((current) => Math.min(4, current + 0.1))}
+            aria-label="Zoom in canvas"
+          >+
+          </button>
+          <span className="min-w-[3.5rem] text-center text-[11px] font-mono text-[var(--text-muted)]">{Math.round(workspaceZoom * 100)}%</span>
+          <button
+            type="button"
+            className="h-7 w-7 rounded text-sm text-[var(--text-primary)] hover:bg-[var(--bg-surface)]"
+            onClick={() => setWorkspaceZoom((current) => Math.max(0.25, current - 0.1))}
+            aria-label="Zoom out canvas"
+          >−
+          </button>
+          <button
+            type="button"
+            className="rounded px-2 py-1 text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-surface)]"
+            onClick={() => { setWorkspaceZoom(1); setWorkspacePan({ x: 0, y: 0 }); }}
+            aria-label="Fit canvas"
+          >Fit
+          </button>
+        </div>
+        <div
+          className="select-none"
+          style={{
+            transform: `translate(${workspacePan.x}px, ${workspacePan.y}px) scale(${scale * workspaceZoom})`,
+            transformOrigin: 'center center',
+            cursor: isDraggingWorkspace ? 'grabbing' : 'grab',
+          }}
+        >
           <canvas
             ref={canvasRef}
             width={canvasWidth}

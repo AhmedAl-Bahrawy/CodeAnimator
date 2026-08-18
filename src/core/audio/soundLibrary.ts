@@ -36,13 +36,40 @@ export function getSoundCue(id: SoundCueId): SoundCueDefinition {
   return soundLibrary.find((cue) => cue.id === id) || soundLibrary[0];
 }
 
-export function playSoundCue(id: SoundCueId, volume: number): void {
-  if (id === 'none' || typeof window === 'undefined') return;
+let sharedAudioContext: AudioContext | null = null;
+
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (sharedAudioContext) return sharedAudioContext;
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  const context = new AudioContextClass();
+  if (!AudioContextClass) return null;
+  sharedAudioContext = new AudioContextClass();
+  return sharedAudioContext;
+}
+
+export function playSoundCue(id: SoundCueId, volume: number): void {
+  if (id === 'none') return;
+  const context = getSharedAudioContext();
+  if (!context) return;
   void context.resume().then(() => {
     getSoundCue(id).play(context, Math.max(0, Math.min(1, volume)));
-    window.setTimeout(() => void context.close(), 600);
+  }).catch(() => undefined);
+}
+
+export function scheduleSoundCue(id: SoundCueId, volume: number, delaySeconds = 0): void {
+  if (id === 'none') return;
+  const context = getSharedAudioContext();
+  if (!context) return;
+  void context.resume().then(() => {
+    const start = Math.max(0, context.currentTime + delaySeconds);
+    const cue = getSoundCue(id);
+    if (delaySeconds <= 0) {
+      cue.play(context, Math.max(0, Math.min(1, volume)));
+      return;
+    }
+    window.setTimeout(() => {
+      cue.play(context, Math.max(0, Math.min(1, volume)));
+    }, delaySeconds * 1000);
+    void start;
   }).catch(() => undefined);
 }

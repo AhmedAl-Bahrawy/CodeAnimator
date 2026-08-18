@@ -56,13 +56,12 @@ export function getStateAtTime(
         break;
       }
       case 'type-word': {
-        const p = event.payload as { line: number; text: string };
+        const p = event.payload as { line: number; text: string; startCol?: number; endCol?: number };
         currentLine = p.line;
-        const existing = lineBuffers[p.line]?.join('') || '';
-        const col = existing.length;
-        currentCol = col + p.text.length;
+        const col = p.startCol ?? (lineBuffers[p.line]?.join('').length || 0);
+        currentCol = p.endCol ?? col + p.text.length;
         if (lineBuffers[p.line]) {
-          for (let ci = 0; ci < p.text.length; ci++) {
+          for (let ci = 0; ci < p.text.length; ci += 1) {
             lineBuffers[p.line][col + ci] = p.text[ci];
           }
         }

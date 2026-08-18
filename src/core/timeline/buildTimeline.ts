@@ -7,133 +7,119 @@ export interface TimelineBuildOptions {
   markupEvents?: (TimelineEvent & { lineIndex?: number })[];
 }
 
+/**
+ * Build one deterministic event stream for preview and export.
+ *
+ * `baseSpeed` always means visible units per second for the selected mode:
+ * characters, word/whitespace segments, or lines. Every typing event carries
+ * its absolute source column so replay never has to infer positions from
+ * already-rendered text.
+ */
 export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline {
   const { source, typingConfig, fps, markupEvents = [] } = options;
   const events: TimelineEvent[] = [];
+  const lines = source.split('\n');
+  const speedMap = new Map<number, number>();
+  const perLineMarkup = new Map<number, (TimelineEvent & { lineIndex?: number })[]>();
+
+  for (const markupEvent of markupEvents) {
+    const lineIndex = markupEvent.lineIndex ?? 0;
+    if (markupEvent.type === 'set-speed') {
+      const speed = Number((markupEvent.payload as { speed?: number }).speed);
+      if (Number.isFinite(speed) && speed > 0) speedMap.set(lineIndex, speed);
+      continue;
+    }
+    const lineEvents = perLineMarkup.get(lineIndex) || [];
+    lineEvents.push(markupEvent);
+    perLineMarkup.set(lineIndex, lineEvents);
+  }
+
+  const unitDurationMs = (speed: number): number =>
+    1000 / Math.max(1, speed);
 
   let currentTimeMs = 0;
-  let currentSpeed = typingConfig.baseSpeed;
-
-  const getTimeForUnit = (speed: number): number => {
-    switch (typingConfig.mode) {
-      case 'character': return 1000 / speed;
-      case 'word': return 1000 / (speed / 5);
-      case 'line': return 1000 / (speed / 40);
-      default: return 1000 / speed;
-    }
-  };
-
-  const lines = source.split('\n');
-
-  // Build a speed map from markup events (lineIndex -> speed)
-  const speedMap = new Map<number, number>();
-  for (const me of markupEvents) {
-    if (me.type === 'set-speed') {
-      speedMap.set(me.lineIndex ?? 0, (me.payload as { speed: number }).speed);
-    }
-  }
-
-  // Build a list of per-line markup events (excluding speed, which is handled via speedMap)
-  const perLineMarkup = new Map<number, (TimelineEvent & { lineIndex?: number })[]>();
-  for (const me of markupEvents) {
-    if (me.type === 'set-speed') continue;
-    const lineIdx = me.lineIndex ?? 0;
-    if (!perLineMarkup.has(lineIdx)) perLineMarkup.set(lineIdx, []);
-    perLineMarkup.get(lineIdx)!.push(me);
-  }
-
-  // Emit typing events, inserting markup and pauses at the right moments
-  // BLK-04: Build events in one pass so pauses properly shift subsequent events
-
-  // Start with cursor jump
+  let currentSpeed = Math.max(1, typingConfig.baseSpeed);
   events.push({ tMs: 0, type: 'cursor-jump', payload: { line: 0, col: 0 } });
 
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const line = lines[lineIdx];
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const lineEvents = perLineMarkup.get(lineIndex) || [];
+    const pauseEvents = lineEvents.filter((event) => event.type === 'pause');
+    const otherMarkup = lineEvents.filter((event) => event.type !== 'pause');
 
-    // Check for speed change on this line
-    if (speedMap.has(lineIdx)) {
-      currentSpeed = speedMap.get(lineIdx)!;
+    if (speedMap.has(lineIndex)) {
+      currentSpeed = speedMap.get(lineIndex)!;
       events.push({
         tMs: currentTimeMs,
         type: 'set-speed',
         payload: { speed: currentSpeed },
-      } as TimelineEvent);
-    }
-
-    // Emit pre-line markup events (e.g. highlight, focus, pause, clear, cut)
-    const lineMarkup = perLineMarkup.get(lineIdx) || [];
-    const pauseEvents = lineMarkup.filter(e => e.type === 'pause');
-    const otherMarkup = lineMarkup.filter(e => e.type !== 'pause');
-
-    // Non-pause markup events at the start of this line
-    for (const me of otherMarkup) {
-      events.push({
-        tMs: currentTimeMs,
-        type: me.type,
-        payload: { ...me.payload },
       });
     }
 
-    // Typing events for this line
-    if (typingConfig.mode === 'line') {
-      currentTimeMs += getTimeForUnit(currentSpeed);
+    for (const markupEvent of otherMarkup) {
       events.push({
         tMs: currentTimeMs,
-        type: 'type-line',
-        payload: { line: lineIdx, text: line, startCol: 0, endCol: line.length },
+        type: markupEvent.type,
+        payload: { ...markupEvent.payload },
+      });
+    }
+
+    const emitTypingEvent = (type: TimelineEvent['type'], payload: Record<string, unknown>, units = 1) => {
+      currentTimeMs += unitDurationMs(currentSpeed) * Math.max(0.01, units);
+      events.push({ tMs: currentTimeMs, type, payload });
+    };
+
+    if (typingConfig.mode === 'line') {
+      emitTypingEvent('type-line', {
+        line: lineIndex,
+        text: line,
+        startCol: 0,
+        endCol: line.length,
       });
     } else if (typingConfig.mode === 'word') {
-      const words = line.split(/(\s+)/);
-      for (let wordIdx = 0; wordIdx < words.length; wordIdx++) {
-        currentTimeMs += getTimeForUnit(currentSpeed);
-        events.push({
-          tMs: currentTimeMs,
-          type: 'type-word',
-          payload: { line: lineIdx, text: words[wordIdx], wordIndex: wordIdx },
+      const segments = [...line.matchAll(/\S+|\s+/g)];
+      for (const segment of segments) {
+        const text = segment[0];
+        const startCol = segment.index ?? 0;
+        emitTypingEvent('type-word', {
+          line: lineIndex,
+          text,
+          startCol,
+          endCol: startCol + text.length,
         });
       }
     } else {
-      for (let col = 0; col < line.length; col++) {
-        currentTimeMs += getTimeForUnit(currentSpeed);
-        events.push({
-          tMs: currentTimeMs,
-          type: 'type-char',
-          payload: { line: lineIdx, col, char: line[col] },
+      for (let column = 0; column < line.length; column += 1) {
+        emitTypingEvent('type-char', {
+          line: lineIndex,
+          col: column,
+          char: line[column],
         });
       }
     }
 
-    // Pause events AFTER this line's typing (BLK-04 proper)
-    for (const pauseEv of pauseEvents) {
-      const pauseDurationMs = (pauseEv.payload as { durationMs: number }).durationMs;
-      // Emit the pause event
-      events.push({
-        tMs: currentTimeMs,
-        type: 'pause',
-        payload: { durationMs: pauseDurationMs },
-      });
-      // Shift current time forward — this is the key fix
-      currentTimeMs += pauseDurationMs;
+    for (const pauseEvent of pauseEvents) {
+      const durationMs = Math.max(0, Number((pauseEvent.payload as { durationMs?: number }).durationMs) || 0);
+      events.push({ tMs: currentTimeMs, type: 'pause', payload: { durationMs } });
+      currentTimeMs += durationMs;
     }
 
-    // Newline between lines (not after the last line)
-    if (lineIdx < lines.length - 1) {
-      currentTimeMs += getTimeForUnit(currentSpeed) * 0.5;
-      events.push({
-        tMs: currentTimeMs,
-        type: 'type-char',
-        payload: { line: lineIdx, col: lines[lineIdx].length, char: '\n' },
-      });
+    if (lineIndex < lines.length - 1) {
+      emitTypingEvent('type-char', {
+        line: lineIndex,
+        col: line.length,
+        char: '\n',
+      }, 0.35);
     }
   }
 
-  events.sort((a, b) => a.tMs - b.tMs);
-
-  // Add 2s trailing silence
   const totalDurationMs = events.length > 0
-    ? events[events.length - 1].tMs + 2000
-    : 2000;
+    ? events[events.length - 1].tMs + 1800
+    : 1800;
 
-  return { totalDurationMs, events, fps };
+  return {
+    totalDurationMs: Math.max(1800, totalDurationMs),
+    events,
+    fps,
+  };
 }
