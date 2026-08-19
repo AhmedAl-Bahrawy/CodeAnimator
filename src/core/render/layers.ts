@@ -286,16 +286,13 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
 
 // ====== Layer 8: Cursor ======
 export function drawCursor(ctx: RenderContext): void {
-  const { ctx: c, state, appearance, typingConfig, frameIndex, fps } = ctx;
+  const { ctx: c, state, appearance, typingConfig } = ctx;
   const { contentX, contentY, lineHeight } = getFrameGeometry(ctx);
   const fit = appearance.contentFitScale;
   const padding = appearance.contentPaddingPx * fit;
   const scrollY = (state.scrollOffsetPx || 0) * fit;
 
-  const blinkCycle = Math.max(1, Math.round(fps * Math.max(0.1, typingConfig.cursorBlinkRate || 0.7)));
-  const blinkFrame = frameIndex % blinkCycle;
-  const isVisible = blinkFrame < blinkCycle / 2;
-  if (!isVisible) return;
+  if (!state.cursorVisible) return;
 
   c.font = `${appearance.fontSizePx * fit}px ${appearance.monoFontFamily}`;
   const charWidth = c.measureText('M').width + appearance.letterSpacingPx * fit;
@@ -327,7 +324,7 @@ export function drawCursor(ctx: RenderContext): void {
 
 // ====== Layer 9: FX Layer ======
 export function drawFX(ctx: RenderContext): void {
-  const { ctx: c, width, height, windowChrome, frameIndex, fps, appearance } = ctx;
+  const { ctx: c, width, height, windowChrome, timeMs, appearance } = ctx;
   const intensity = Math.max(0, Math.min(1, appearance.fxIntensity));
   if (appearance.fxPreset === 'none' && windowChrome.style !== 'terminal') return;
 
@@ -360,11 +357,10 @@ export function drawFX(ctx: RenderContext): void {
     c.fillRect(0, 0, width, height);
   }
 
-  const blinkCycle = Math.max(1, fps * 4);
-  const flickerPhase = (frameIndex % blinkCycle) / blinkCycle;
-  const flickerAlpha = 0.008 * intensity * Math.sin(flickerPhase * Math.PI * 2);
-  if (isCrt && flickerAlpha > 0) {
-    c.fillStyle = `rgba(255, 255, 255, ${flickerAlpha})`;
+  // Use a slow deterministic pulse keyed to playhead time; never to frame arrival.
+  const pulse = (Math.sin(timeMs / 1100) + 1) * 0.5;
+  if (isCrt && pulse > 0.5) {
+    c.fillStyle = `rgba(255, 255, 255, ${0.003 * intensity * pulse})`;
     c.fillRect(0, 0, width, height);
   }
 }

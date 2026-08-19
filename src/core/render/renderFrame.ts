@@ -1,4 +1,5 @@
 import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, TypingConfig, CodeToken } from '@/core/types';
+import { getAnimationFrameMetrics, getCursorVisibility } from '@/core/animation/frameModel';
 import {
   drawBackground,
   drawMargin,
@@ -26,34 +27,23 @@ export interface RenderFrameOptions {
   appearance: import('@/core/types').SceneAppearance;
   frameIndex: number;
   fps: number;
+  timeMs: number;
+  totalDurationMs: number;
   visibleLines: string[];
   tokenLines: CodeToken[][] | null;
 }
 
 export function renderFrame(options: RenderFrameOptions): void {
-  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, skin, appearance, frameIndex, fps, visibleLines, tokenLines } = options;
+  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, skin, appearance, frameIndex, fps, timeMs, totalDurationMs, visibleLines, tokenLines } = options;
 
   ctx.clearRect(0, 0, width, height);
 
-  // Apply canonical zoom plus deterministic scene motion.
+  // Motion is sampled from the same playhead in preview and exports.
+  const motion = getAnimationFrameMetrics(timeMs, totalDurationMs, appearance);
   const zoom = state.zoomLevel || 1;
-  const motionProgress = Math.min(1, frameIndex / Math.max(1, fps * 0.8));
-  const motion = appearance.motionPreset;
-  const motionScale = motion === 'cinematic'
-    ? 0.985 + Math.sin(frameIndex / Math.max(1, fps * 1.8)) * 0.012
-    : motion === 'terminal-pulse'
-      ? 1 + Math.sin(frameIndex / Math.max(1, fps * 0.45)) * 0.006
-      : 1;
-  const motionY = motion === 'slide-in' ? (1 - motionProgress) * 42 : 0;
-  const motionX = motion === 'focus-reveal' ? Math.sin(frameIndex / Math.max(1, fps * 0.7)) * 3 : 0;
-  if (zoom !== 1 || motionScale !== 1 || motionX !== 0 || motionY !== 0) {
-    ctx.save();
-    const cx = width / 2;
-    const cy = height / 2;
-    ctx.translate(cx + motionX, cy + motionY);
-    ctx.scale(zoom * motionScale, zoom * motionScale);
-    ctx.translate(-cx, -cy);
-  }
+  const cameraScale = zoom * motion.scale;
+  const cameraX = motion.translateX;
+  const cameraY = motion.translateY;
 
   // Auto-scroll: if cursor goes below 70% of visible area, scroll it into view
   const lineHeight = typography.fontSize * 1.6;
@@ -65,7 +55,7 @@ export function renderFrame(options: RenderFrameOptions): void {
     ctx,
     width,
     height,
-    state,
+    state: { ...state, cursorVisible: getCursorVisibility(state, appearance) },
     theme,
     background,
     windowChrome,
@@ -75,10 +65,22 @@ export function renderFrame(options: RenderFrameOptions): void {
     appearance,
     frameIndex,
     fps,
+    timeMs,
+    totalDurationMs,
   };
 
-  // Layer 1: Background
+  // Layer 1: Background remains fixed while the code frame moves inside the void.
   drawBackground(renderCtx);
+
+  if (cameraScale !== 1 || cameraX !== 0 || cameraY !== 0 || motion.opacity !== 1) {
+    ctx.save();
+    const cx = width / 2;
+    const cy = height / 2;
+    ctx.translate(cx + cameraX, cy + cameraY);
+    ctx.scale(cameraScale, cameraScale);
+    ctx.translate(-cx, -cy);
+    ctx.globalAlpha = motion.opacity;
+  }
 
   // Layer 2: Outer Margin
   drawMargin(renderCtx);
@@ -107,8 +109,8 @@ export function renderFrame(options: RenderFrameOptions): void {
   // Layer 10: Watermark
   drawWatermark(renderCtx);
 
-  // Reset transform if any camera motion was applied
-  if (zoom !== 1 || motionScale !== 1 || motionX !== 0 || motionY !== 0) {
+  // Reset transform if any camera motion was applied.
+  if (cameraScale !== 1 || cameraX !== 0 || cameraY !== 0 || motion.opacity !== 1) {
     ctx.restore();
   }
 }

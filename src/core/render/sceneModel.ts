@@ -6,6 +6,7 @@ import type {
   Scene,
   Timeline,
   TypographySettings,
+  SceneAnimationSettings,
   SceneAppearance,
   TypingConfig,
   UISkin,
@@ -37,6 +38,7 @@ export interface SceneRenderModel {
   timeline: Timeline;
   appearance: SceneAppearance;
   presentation: NonNullable<Scene['presentation']>;
+  animation: NonNullable<Scene['animation']>;
   audio: NonNullable<Scene['audio']>;
 }
 
@@ -75,6 +77,15 @@ const defaultAudio: NonNullable<Scene['audio']> = {
   enabled: false,
   cueId: 'none',
   volume: 0.35,
+};
+
+const defaultAnimation: SceneAnimationSettings = {
+  easing: 'smooth',
+  introDurationMs: 420,
+  outroDurationMs: 260,
+  cursorFollow: 'exact',
+  cursorBlink: true,
+  cursorBlinkRate: 530,
 };
 
 function resolveAdaptiveFrame(
@@ -131,6 +142,7 @@ export function resolveSceneRenderModel(
   const fps: 30 | 60 = options.fps === 60 ? 60 : 30;
   const presentation = { ...defaultPresentation, ...(scene.presentation || {}) };
   const audio = { ...defaultAudio, ...(scene.audio || {}) };
+  const animation = { ...defaultAnimation, ...(scene.animation || {}) };
   const baseAppearance = {
     codeBackground: skin.tokens.bgElevated || theme.background || skin.tokens.bgPanel,
     codeForeground: theme.foreground || skin.tokens.textPrimary,
@@ -158,6 +170,12 @@ export function resolveSceneRenderModel(
     fxPreset: presentation.fxPreset,
     fxIntensity: presentation.fxIntensity,
     motionPreset: presentation.motionPreset,
+    animationEasing: animation.easing,
+    introDurationMs: animation.introDurationMs,
+    outroDurationMs: animation.outroDurationMs,
+    cursorFollow: animation.cursorFollow,
+    cursorBlink: animation.cursorBlink,
+    cursorBlinkRate: animation.cursorBlinkRate,
   };
   const timeline = buildTimelineFromSource({
     source: parsed.cleanSource,
@@ -184,6 +202,7 @@ export function resolveSceneRenderModel(
     timeline,
     appearance,
     presentation,
+    animation,
     audio,
   };
 }

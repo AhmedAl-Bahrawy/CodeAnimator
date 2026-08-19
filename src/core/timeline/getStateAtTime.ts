@@ -10,7 +10,11 @@ export function getStateAtTime(
   const { events } = timeline;
   const sourceLines = source.split('\n');
 
+  const clampedTimeMs = Math.max(0, Math.min(tMs, timeline.totalDurationMs));
   const state: CanvasState = {
+    playheadMs: clampedTimeMs,
+    cursorVisible: true,
+    animationProgress: Math.min(1, clampedTimeMs / Math.max(1, timeline.totalDurationMs)),
     visibleText: '',
     visibleLines: [],
     tokens: [],

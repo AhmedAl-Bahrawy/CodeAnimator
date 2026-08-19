@@ -42,6 +42,12 @@ export interface CodeToken {
 
 // ====== Canvas State at time T ======
 export interface CanvasState {
+  /** Exact deterministic playhead used for this rendered frame. */
+  playheadMs: number;
+  /** Stable cursor visibility derived from playhead time, not render-frame arrival. */
+  cursorVisible: boolean;
+  /** Normalized reveal progress for motion and transition effects. */
+  animationProgress: number;
   visibleText: string;
   visibleLines: string[];
   tokens: CodeToken[];
@@ -93,6 +99,8 @@ export interface WindowChromeConfig {
 // ====== Scene ======
 export type FramingMode = 'fit-code' | 'fill-canvas';
 export type MotionPreset = 'typewriter' | 'cinematic' | 'focus-reveal' | 'slide-in' | 'terminal-pulse';
+export type AnimationEasing = 'linear' | 'smooth' | 'snappy';
+export type CursorFollowMode = 'exact' | 'word-end' | 'line-end';
 export type FxPreset = 'none' | 'academy-glow' | 'crt' | 'neon' | 'paper';
 export type SoundCueId = 'none' | 'key-tap' | 'soft-pop' | 'academy-chime' | 'terminal-beep';
 
@@ -102,6 +110,15 @@ export interface ScenePresentationSettings {
   motionPreset: MotionPreset;
   fxPreset: FxPreset;
   fxIntensity: number;
+}
+
+export interface SceneAnimationSettings {
+  easing: AnimationEasing;
+  introDurationMs: number;
+  outroDurationMs: number;
+  cursorFollow: CursorFollowMode;
+  cursorBlink: boolean;
+  cursorBlinkRate: number;
 }
 
 export interface SceneAudioSettings {
@@ -120,6 +137,7 @@ export interface Scene {
   typingConfig: TypingConfig;
   typography: TypographySettings;
   presentation?: ScenePresentationSettings;
+  animation?: SceneAnimationSettings;
   audio?: SceneAudioSettings;
 }
 
@@ -262,6 +280,12 @@ export interface SceneAppearance {
   fxPreset: FxPreset;
   fxIntensity: number;
   motionPreset: MotionPreset;
+  animationEasing: AnimationEasing;
+  introDurationMs: number;
+  outroDurationMs: number;
+  cursorFollow: CursorFollowMode;
+  cursorBlink: boolean;
+  cursorBlinkRate: number;
 }
 
 // ====== Rendering Layer Types ======
@@ -279,6 +303,8 @@ export interface RenderContext {
   appearance: SceneAppearance;
   frameIndex: number;
   fps: number;
+  timeMs: number;
+  totalDurationMs: number;
 }
 
 // ====== UI Skin Types ======

@@ -113,6 +113,8 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         appearance: config.appearance,
         frameIndex,
         fps: config.fps,
+        timeMs: state.playheadMs,
+        totalDurationMs: config.timeline.totalDurationMs,
         visibleLines: state.visibleLines,
         tokenLines: tokenLinesForFrame,
       });

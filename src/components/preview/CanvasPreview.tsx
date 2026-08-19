@@ -121,6 +121,9 @@ export function CanvasPreview() {
     if (!sceneModel || !timeline) return null;
     const allLines = source.split('\n');
     return {
+      playheadMs: timeline.totalDurationMs,
+      cursorVisible: true,
+      animationProgress: 1,
       visibleText: source,
       visibleLines: allLines,
       tokens: [],
@@ -163,6 +166,8 @@ export function CanvasPreview() {
       appearance: model.appearance,
       frameIndex: Math.round((timeMs / 1000) * (tl.fps || 30)),
       fps: tl.fps || 30,
+      timeMs: state.playheadMs,
+      totalDurationMs: tl.totalDurationMs,
       visibleLines: state.visibleLines,
       tokenLines: visibleTokenLines,
     });
@@ -204,29 +209,14 @@ export function CanvasPreview() {
         lastAudioTimeRef.current = nextTime;
       }
       currentTimeRef.current = nextTime;
+      seek(nextTime);
       renderFnRef.current?.(nextTime, false);
       if (isPlayingRef.current) animationRef.current = requestAnimationFrame(animate);
     };
 
     animationRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationRef.current);
-  }, [isPlaying, timeline]);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    let rafId = 0;
-    let lastSync = 0;
-    const sync = () => {
-      const now = performance.now();
-      if (now - lastSync > 50) {
-        seek(currentTimeRef.current);
-        lastSync = now;
-      }
-      if (isPlayingRef.current) rafId = requestAnimationFrame(sync);
-    };
-    rafId = requestAnimationFrame(sync);
-    return () => cancelAnimationFrame(rafId);
-  }, [isPlaying, seek]);
+  }, [isPlaying, timeline, sceneModel, seek]);
 
   useEffect(() => {
     if (!isPlaying) renderFrameAt(currentTimeMs, true);

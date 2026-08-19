@@ -7,9 +7,8 @@ import { CanvasPreview } from './components/preview/CanvasPreview';
 import { CodeThemeGallery } from './components/style/CodeThemeGallery';
 import { BackgroundPicker } from './components/style/BackgroundPicker';
 import { WindowChromeControls } from './components/style/WindowChromeControls';
-import { TypingBehaviorControls } from './components/style/TypingBehaviorControls';
 import { TypographyControls } from './components/style/TypographyControls';
-import { PresentationControls } from './components/style/PresentationControls';
+import { AnimationPanel } from './components/animation/AnimationPanel';
 import { ExportPanel } from './components/export/ExportPanel';
 import { AspectRatioSelector } from './components/export/AspectRatioSelector';
 import { useProjectStore, useTimelineStore, useUISkinStore, useThemeStore } from './stores';
@@ -34,7 +33,7 @@ function App() {
   const updateScene = useProjectStore(s => s.updateScene);
   const setTimeline = useTimelineStore(s => s.setTimeline);
 
-  const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'preview'>('editor');
+  const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'animations' | 'preview'>('editor');
   const [showPresets, setShowPresets] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
 
@@ -171,6 +170,13 @@ function App() {
     });
   }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
 
+  const handleAnimationChange = useCallback((updates: Record<string, unknown>) => {
+    if (!currentProject || !currentScene || !sceneModel) return;
+    updateScene(currentProject.id, currentSceneIndex, {
+      animation: { ...sceneModel.animation, ...updates },
+    });
+  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
+
   const handleAspectRatioChange = useCallback((value: string) => {
     if (!currentProject) return;
     useProjectStore.getState().updateProject(currentProject.id, { aspectRatio: value as '9:16' | '1:1' | '16:9' | 'custom' });
@@ -235,6 +241,7 @@ function App() {
             <TabsList className="mx-3 mt-3">
               <TabsTrigger value="theme" className="text-xs flex-1">Theme</TabsTrigger>
               <TabsTrigger value="style" className="text-xs flex-1">Style</TabsTrigger>
+              <TabsTrigger value="animations" className="text-xs flex-1">Animate</TabsTrigger>
               <TabsTrigger value="skins" className="text-xs flex-1">Skins</TabsTrigger>
               <TabsTrigger value="export" className="text-xs flex-1">Export</TabsTrigger>
             </TabsList>
@@ -253,26 +260,29 @@ function App() {
                   config={currentScene.windowChrome}
                   onChange={handleWindowChromeChange}
                 />
-                <TypingBehaviorControls
-                  config={currentScene.typingConfig}
-                  onChange={handleTypingChange}
-                />
                 <TypographyControls
                   settings={currentScene.typography}
                   onChange={(updates) => handleTypographyChange(updates)}
                 />
-                {sceneModel && (
-                  <PresentationControls
-                    presentation={sceneModel.presentation}
-                    audio={sceneModel.audio}
-                    onPresentationChange={handlePresentationChange}
-                    onAudioChange={handleAudioChange}
-                  />
-                )}
                 <AspectRatioSelector
                   value={currentProject?.aspectRatio || '9:16'}
                   onChange={handleAspectRatioChange}
                 />
+              </TabsContent>
+
+              <TabsContent value="animations" className="p-3 m-0">
+                {sceneModel && (
+                  <AnimationPanel
+                    animation={sceneModel.animation}
+                    presentation={sceneModel.presentation}
+                    typing={sceneModel.typingConfig}
+                    audio={sceneModel.audio}
+                    onAnimationChange={handleAnimationChange}
+                    onPresentationChange={handlePresentationChange}
+                    onTypingChange={handleTypingChange}
+                    onAudioChange={handleAudioChange}
+                  />
+                )}
               </TabsContent>
 
               <TabsContent value="skins" className="p-3 m-0 space-y-5">
@@ -322,18 +332,20 @@ function App() {
                 config={currentScene.windowChrome}
                 onChange={handleWindowChromeChange}
               />
-              <TypingBehaviorControls
-                config={currentScene.typingConfig}
-                onChange={handleTypingChange}
+            </div>
+          )}
+          {mobileTab === 'animations' && sceneModel && (
+            <div className="h-full overflow-y-auto p-3">
+              <AnimationPanel
+                animation={sceneModel.animation}
+                presentation={sceneModel.presentation}
+                typing={sceneModel.typingConfig}
+                audio={sceneModel.audio}
+                onAnimationChange={handleAnimationChange}
+                onPresentationChange={handlePresentationChange}
+                onTypingChange={handleTypingChange}
+                onAudioChange={handleAudioChange}
               />
-              {sceneModel && (
-                <PresentationControls
-                  presentation={sceneModel.presentation}
-                  audio={sceneModel.audio}
-                  onPresentationChange={handlePresentationChange}
-                  onAudioChange={handleAudioChange}
-                />
-              )}
             </div>
           )}
           {mobileTab === 'preview' && (
@@ -345,7 +357,7 @@ function App() {
 
         {/* Mobile tab bar */}
         <div className="flex border-t border-[var(--border)] bg-[var(--bg-elevated)]">
-          {(['editor', 'style', 'preview'] as const).map((tab) => (
+          {(['editor', 'style', 'animations', 'preview'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setMobileTab(tab)}

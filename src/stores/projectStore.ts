@@ -28,7 +28,7 @@ const defaultTypingConfig: TypingConfig = {
   mode: 'character',
   baseSpeed: 40,
   cursorStyle: 'bar',
-  cursorBlinkRate: 1,
+  cursorBlinkRate: 530,
   autoScroll: true,
 };
 
