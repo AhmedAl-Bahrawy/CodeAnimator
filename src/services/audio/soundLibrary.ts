@@ -4,13 +4,13 @@ export interface SoundCueDefinition {
   id: SoundCueId;
   name: string;
   description: string;
-  play: (context: AudioContext, volume: number) => void;
+  play: (context: BaseAudioContext, volume: number, startTime?: number) => void;
 }
 
-function tone(context: AudioContext, frequency: number, duration: number, volume: number, type: OscillatorType = 'sine', delay = 0): void {
+function tone(context: BaseAudioContext, frequency: number, duration: number, volume: number, type: OscillatorType = 'sine', startTime = context.currentTime): void {
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  const start = context.currentTime + delay;
+  const start = Math.max(context.currentTime, startTime);
   oscillator.type = type;
   oscillator.frequency.setValueAtTime(frequency, start);
   gain.gain.setValueAtTime(0.0001, start);
@@ -23,13 +23,13 @@ function tone(context: AudioContext, frequency: number, duration: number, volume
 
 export const soundLibrary: SoundCueDefinition[] = [
   { id: 'none', name: 'Silent', description: 'No sound cue.', play: () => undefined },
-  { id: 'key-tap', name: 'Key Tap', description: 'Short neutral typing tick.', play: (context, volume) => tone(context, 880, 0.045, volume * 0.18, 'square') },
-  { id: 'soft-pop', name: 'Soft Pop', description: 'Warm UI confirmation sound.', play: (context, volume) => tone(context, 520, 0.12, volume * 0.22, 'sine') },
-  { id: 'academy-chime', name: 'Academy Chime', description: 'Two-note navy-and-gold signature chime.', play: (context, volume) => {
-    tone(context, 523.25, 0.22, volume * 0.2, 'sine');
-    tone(context, 783.99, 0.3, volume * 0.16, 'sine', 0.08);
+  { id: 'key-tap', name: 'Key Tap', description: 'Short neutral typing tick.', play: (context, volume, startTime = context.currentTime) => tone(context, 880, 0.045, volume * 0.18, 'square', startTime) },
+  { id: 'soft-pop', name: 'Soft Pop', description: 'Warm UI confirmation sound.', play: (context, volume, startTime = context.currentTime) => tone(context, 520, 0.12, volume * 0.22, 'sine', startTime) },
+  { id: 'academy-chime', name: 'Academy Chime', description: 'Two-note navy-and-gold signature chime.', play: (context, volume, startTime = context.currentTime) => {
+    tone(context, 523.25, 0.22, volume * 0.2, 'sine', startTime);
+    tone(context, 783.99, 0.3, volume * 0.16, 'sine', startTime + 0.08);
   } },
-  { id: 'terminal-beep', name: 'Terminal Beep', description: 'Crisp retro terminal signal.', play: (context, volume) => tone(context, 1180, 0.07, volume * 0.2, 'square') },
+  { id: 'terminal-beep', name: 'Terminal Beep', description: 'Crisp retro terminal signal.', play: (context, volume, startTime = context.currentTime) => tone(context, 1180, 0.07, volume * 0.2, 'square', startTime) },
 ];
 
 export function getSoundCue(id: SoundCueId): SoundCueDefinition {

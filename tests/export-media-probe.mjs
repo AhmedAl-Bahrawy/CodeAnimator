@@ -17,8 +17,13 @@ const editor = page.locator('.cm-content').first();
 await editor.click();
 await page.keyboard.press('Control+A');
 await page.keyboard.type('const playable = true;\nconsole.log(playable);');
-await page.waitForTimeout(600);
-await page.getByRole('tab', { name: 'Export' }).click();
+  await page.waitForTimeout(600);
+  await page.getByRole('tab', { name: 'Animate' }).click();
+  await page.waitForTimeout(300);
+  const animationComboboxes = page.getByRole('combobox');
+  await animationComboboxes.nth(7).click();
+  await page.getByRole('option', { name: 'Key Tap' }).click();
+  await page.getByRole('tab', { name: 'Export' }).click();
 await page.waitForTimeout(300);
 
 const results = {};
@@ -33,6 +38,8 @@ for (const format of ['MP4', 'WebM']) {
   const bytes = await readFile(target);
   const bodyText = await page.locator('body').innerText();
   const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=format_name,duration,size:stream=index,codec_name,codec_type,width,height,avg_frame_rate,nb_frames', '-of', 'json', target], { encoding: 'utf8' });
+  const probeJson = probe.status === 0 ? JSON.parse(probe.stdout) : null;
+  const streams = probeJson?.streams || [];
   results[format] = {
     path: target,
     bytes: bytes.length,
@@ -40,10 +47,12 @@ for (const format of ['MP4', 'WebM']) {
     ffprobeExit: probe.status,
     ffprobeStdout: probe.stdout,
     ffprobeStderr: probe.stderr,
+    hasVideo: streams.some((stream) => stream.codec_type === 'video'),
+    hasAudio: streams.some((stream) => stream.codec_type === 'audio'),
     statusTail: bodyText.slice(-500),
   };
   await page.waitForTimeout(500);
 }
 console.log(JSON.stringify({ results, errors }, null, 2));
 await browser.close();
-if (errors.length || Object.values(results).some((r) => r.ffprobeExit !== 0)) process.exit(1);
+if (errors.length || Object.entries(results).some(([format, result]) => result.ffprobeExit !== 0 || !result.hasVideo || (format === 'MP4' && !result.hasAudio))) process.exit(1);
