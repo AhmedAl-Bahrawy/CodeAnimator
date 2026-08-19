@@ -142,16 +142,6 @@ export function AnimationPanel({
           <Label>Exit duration: {animation.outroDurationMs}ms</Label>
           <Slider value={[animation.outroDurationMs]} onValueChange={([value]) => onAnimationChange({ outroDurationMs: value })} min={0} max={1200} step={20} />
         </div>
-        <div className="space-y-2">
-          <Label>Code framing</Label>
-          <Select value={presentation.framingMode} onValueChange={(value) => onPresentationChange({ framingMode: value as ScenePresentationSettings['framingMode'] })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="fit-code">Fit to code</SelectItem>
-              <SelectItem value="fill-canvas">Fill canvas</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </section>
 
       <section className="space-y-3">

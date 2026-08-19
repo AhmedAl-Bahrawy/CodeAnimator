@@ -147,6 +147,7 @@ function App() {
                   onBackgroundChange={handleBackgroundChange}
                   onWindowChromeChange={handleWindowChromeChange}
                   onTypographyChange={handleTypographyChange}
+                  onPresentationChange={handlePresentationChange}
                   onAspectRatioChange={handleAspectRatioChange}
                 />
               </TabsContent>
@@ -212,6 +213,7 @@ function App() {
                 onBackgroundChange={handleBackgroundChange}
                 onWindowChromeChange={handleWindowChromeChange}
                 onTypographyChange={handleTypographyChange}
+                onPresentationChange={handlePresentationChange}
                 onAspectRatioChange={handleAspectRatioChange}
               />
             </div>
@@ -221,7 +223,7 @@ function App() {
               <ExportPanel />
             </div>
           )}
-          {mobileTab === 'preview' && sceneModel && (
+          {mobileTab === 'animations' && sceneModel && (
             <div className="h-full overflow-y-auto p-3">
               <AnimationPanel
                 animation={sceneModel.animation}

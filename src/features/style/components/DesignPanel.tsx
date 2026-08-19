@@ -5,7 +5,8 @@ import { CodeThemeGallery } from './CodeThemeGallery';
 import { TypographyControls } from './TypographyControls';
 import { UISkinGallery } from './UISkinGallery';
 import { WindowChromeControls } from './WindowChromeControls';
-import type { Project, Scene, TypographySettings, WindowChromeConfig } from '@/types/domain';
+import { PresentationControls } from './PresentationControls';
+import type { Project, Scene, ScenePresentationSettings, TypographySettings, WindowChromeConfig } from '@/types/domain';
 
 interface DesignPanelProps {
   scene: Scene;
@@ -13,6 +14,7 @@ interface DesignPanelProps {
   onBackgroundChange: (backgroundPresetId: string) => void;
   onWindowChromeChange: (updates: Partial<WindowChromeConfig>) => void;
   onTypographyChange: (updates: Partial<TypographySettings>) => void;
+  onPresentationChange: (updates: Partial<ScenePresentationSettings>) => void;
   onAspectRatioChange: (aspectRatio: Project['aspectRatio']) => void;
 }
 
@@ -22,6 +24,7 @@ export function DesignPanel({
   onBackgroundChange,
   onWindowChromeChange,
   onTypographyChange,
+  onPresentationChange,
   onAspectRatioChange,
 }: DesignPanelProps) {
   return (
@@ -42,6 +45,16 @@ export function DesignPanel({
         </div>
         <WindowChromeControls config={scene.windowChrome} onChange={onWindowChromeChange} />
         <TypographyControls settings={scene.typography} onChange={onTypographyChange} />
+      </section>
+
+      <section className="space-y-3 border-t border-[var(--border)] pt-5">
+        <PresentationControls presentation={scene.presentation || {
+          framingMode: 'fit-code',
+          maxZoom: 1.35,
+          motionPreset: 'typewriter',
+          fxPreset: 'none',
+          fxIntensity: 0.55,
+        }} onPresentationChange={onPresentationChange} />
       </section>
 
       <section className="space-y-3 border-t border-[var(--border)] pt-5">

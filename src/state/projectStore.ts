@@ -50,8 +50,8 @@ const defaultTypography: TypographySettings = {
 };
 
 const defaultPresentation = {
-  framingMode: 'snap-content' as const,
-  maxZoom: 3.2,
+  framingMode: 'fit-code' as const,
+  maxZoom: 1.35,
   motionPreset: 'typewriter' as const,
   fxPreset: 'none' as const,
   fxIntensity: 0.55,

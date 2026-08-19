@@ -260,8 +260,9 @@ export function drawHighlightOverlay(ctx: RenderContext, visibleLines: string[])
   if (!state.activeHighlightRange && state.focusLine === null) return;
 
   const { contentX, contentY, contentW, contentH, lineHeight } = getFrameGeometry(ctx);
-  const padding = appearance.contentPaddingPx;
-  const scrollY = state.scrollOffsetPx || 0;
+  const fit = appearance.contentFitScale;
+  const padding = appearance.contentPaddingPx * fit;
+  const scrollY = (state.scrollOffsetPx || 0) * fit;
 
   // Dim overlay for focus mode
   if (state.focusLine !== null) {

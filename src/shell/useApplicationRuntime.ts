@@ -3,7 +3,7 @@ import { loadAllProjects } from '@/persistence/projectRepo';
 import { startAutosaveSubscription } from '@/persistence/autosave';
 import { getUISkinById } from '@/data/uiSkins';
 import type { SceneRenderModel } from '@/services/render/sceneModel';
-import type { Project, Scene, UISkin } from '@/types/domain';
+import type { FramingMode, Project, Scene, UISkin } from '@/types/domain';
 import { useProjectStore, useThemeStore, useTimelineStore, useUISkinStore } from '@/state';
 import { applySkinToDocument } from '@/state/uiSkinStore';
 
@@ -37,24 +37,22 @@ export function useApplicationRuntime({
         const saved = await loadAllProjects();
         if (cancelled) return;
         if (saved.length > 0) {
-          const framingMigrationKey = 'codereel-snap-content-framing-v2';
-          const shouldMigrateFraming = localStorage.getItem(framingMigrationKey) !== '1';
-          const hydratedProjects = shouldMigrateFraming
-            ? saved.map(savedProject => ({
-                ...savedProject,
-                scenes: savedProject.scenes.map(savedScene => ({
-                  ...savedScene,
-                  presentation: {
-                    framingMode: 'snap-content' as const,
-                    maxZoom: Math.max(3.2, savedScene.presentation?.maxZoom || 0),
-                    motionPreset: savedScene.presentation?.motionPreset || 'typewriter',
-                    fxPreset: savedScene.presentation?.fxPreset || 'none',
-                    fxIntensity: savedScene.presentation?.fxIntensity ?? 0.55,
-                  },
-                })),
-              }))
-            : saved;
-          if (shouldMigrateFraming) localStorage.setItem(framingMigrationKey, '1');
+          const validFramingModes = new Set(['fit-code', 'fill-canvas', 'code-lines']);
+          const hydratedProjects = saved.map(savedProject => ({
+            ...savedProject,
+            scenes: savedProject.scenes.map(savedScene => ({
+              ...savedScene,
+              presentation: {
+                framingMode: validFramingModes.has(savedScene.presentation?.framingMode || '')
+                  ? savedScene.presentation?.framingMode as FramingMode
+                  : 'fit-code',
+                maxZoom: Math.min(4, Math.max(0.5, savedScene.presentation?.maxZoom || 1.35)),
+                motionPreset: savedScene.presentation?.motionPreset || 'typewriter',
+                fxPreset: savedScene.presentation?.fxPreset || 'none',
+                fxIntensity: savedScene.presentation?.fxIntensity ?? 0.55,
+              },
+            })),
+          }));
           useProjectStore.setState({
             projects: hydratedProjects,
             currentProjectId: hydratedProjects[0].id,

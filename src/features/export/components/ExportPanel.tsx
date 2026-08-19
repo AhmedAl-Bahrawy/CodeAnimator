@@ -46,23 +46,28 @@ export function ExportPanel() {
     w: sceneModel?.width || 1080,
     h: sceneModel?.height || 1920,
   };
+  const isCodeLinesMode = sceneModel?.presentation.framingMode === 'code-lines';
 
-  // Override dimensions from platform preset only when a real preset is
-  // selected — "project-default" respects the project's own aspect ratio (BLK-04).
+  // Code Lines Mode is content-sized by contract. Platform presets remain
+  // useful for the other two compositions but cannot replace adaptive output.
   const selectedPresetData = platformPresets.find(p => p.id === selectedPreset);
-  const logicalExportWidth = selectedPresetData ? selectedPresetData.width : projectDimensions.w;
-  const logicalExportHeight = selectedPresetData ? selectedPresetData.height : projectDimensions.h;
+  const logicalExportWidth = isCodeLinesMode
+    ? projectDimensions.w
+    : selectedPresetData ? selectedPresetData.width : projectDimensions.w;
+  const logicalExportHeight = isCodeLinesMode
+    ? projectDimensions.h
+    : selectedPresetData ? selectedPresetData.height : projectDimensions.h;
   const { width: exportWidth, height: exportHeight } = getExportDimensions(logicalExportWidth, logicalExportHeight, quality, format);
 
   // Warn when the timeline exceeds the selected platform's max duration.
   const durationWarning = useMemo(() => {
-    if (selectedPresetData && selectedPresetData.maxDurationMs < Infinity && sceneModel) {
+    if (!isCodeLinesMode && selectedPresetData && selectedPresetData.maxDurationMs < Infinity && sceneModel) {
       if (sceneModel.timeline.totalDurationMs > selectedPresetData.maxDurationMs) {
         return `This timeline (~${Math.round(sceneModel.timeline.totalDurationMs / 1000)}s) exceeds the ${selectedPresetData.label} limit of ${selectedPresetData.maxDurationMs / 1000}s.`;
       }
     }
     return '';
-  }, [selectedPresetData, sceneModel]);
+  }, [isCodeLinesMode, selectedPresetData, sceneModel]);
 
   const handleExport = async () => {
     if (!sceneModel || !sceneTheme) {
@@ -135,7 +140,9 @@ export function ExportPanel() {
       a.href = url;
       // BLK-02: Use correct file extension based on actual blob MIME type
       const ext = blob.type.includes('webm') ? 'webm' : blob.type.includes('gif') ? 'gif' : format;
-      const filename = selectedPresetData ? `codereel-${selectedPresetData.id}.${ext}` : `codereel-export.${ext}`;
+      const filename = isCodeLinesMode
+        ? `codereel-code-lines.${ext}`
+        : selectedPresetData ? `codereel-${selectedPresetData.id}.${ext}` : `codereel-export.${ext}`;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
@@ -176,9 +183,11 @@ export function ExportPanel() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="project-default">Project Default ({projectDimensions.w}x{projectDimensions.h})</SelectItem>
+            <SelectItem value="project-default">
+              {isCodeLinesMode ? `Adaptive code lines (${projectDimensions.w}x${projectDimensions.h})` : `Project Default (${projectDimensions.w}x${projectDimensions.h})`}
+            </SelectItem>
             {platformPresets.map((preset) => (
-              <SelectItem key={preset.id} value={preset.id}>
+              <SelectItem key={preset.id} value={preset.id} disabled={isCodeLinesMode}>
                 {preset.label} ({preset.width}x{preset.height})
               </SelectItem>
             ))}
@@ -187,7 +196,7 @@ export function ExportPanel() {
         <div className="text-[10px] text-[var(--text-muted)]">
           Output: {exportWidth}x{exportHeight}px
           {format !== 'gif' && ` · ${getExportQualityProfile(quality).label}`}
-          {selectedPreset === 'project-default' && currentProject?.aspectRatio !== 'custom' && ` (${currentProject?.aspectRatio || '9:16'})`}
+          {isCodeLinesMode ? ' · adaptive code lines' : selectedPreset === 'project-default' && currentProject?.aspectRatio !== 'custom' ? ` (${currentProject?.aspectRatio || '9:16'})` : ''}
         </div>
         {durationWarning && (
           <div className="text-[10px] text-[var(--warning)]">{durationWarning}</div>

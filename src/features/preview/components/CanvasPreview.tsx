@@ -128,6 +128,7 @@ export function CanvasPreview() {
       visibleLines: allLines,
       tokens: [],
       cursorLine: Math.max(0, allLines.length - 1),
+      cameraLine: Math.max(0, allLines.length - 1),
       cursorCol: allLines.at(-1)?.length || 0,
       activeHighlightRange: null,
       focusLine: null,

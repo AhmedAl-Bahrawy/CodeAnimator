@@ -55,6 +55,8 @@ export interface CanvasState {
   visibleLines: string[];
   tokens: CodeToken[];
   cursorLine: number;
+  /** Fractional line position used only by the Code Lines follow camera. */
+  cameraLine: number;
   cursorCol: number;
   activeHighlightRange: [number, number] | null;
   focusLine: number | null;
@@ -100,7 +102,7 @@ export interface WindowChromeConfig {
 }
 
 // ====== Scene ======
-export type FramingMode = 'fit-code' | 'fill-canvas' | 'snap-content';
+export type FramingMode = 'fit-code' | 'fill-canvas' | 'code-lines';
 export type MotionPreset = 'typewriter' | 'cinematic' | 'focus-reveal' | 'slide-in' | 'terminal-pulse';
 export type AnimationEasing = 'linear' | 'smooth' | 'snappy';
 export type CursorFollowMode = 'exact' | 'word-end' | 'line-end';
@@ -291,6 +293,12 @@ export interface SceneAppearance {
   cursorFollow: CursorFollowMode;
   cursorBlink: boolean;
   cursorBlinkRate: number;
+  /** Number of non-trailing source lines used by the canonical frame contract. */
+  contentLineCount: number;
+  /** Estimated unscaled width of the source content including gutter and padding. */
+  contentWidthPx: number;
+  /** Stable number of visible lines in Code Lines Mode. */
+  codeLinesViewportLines: number;
 }
 
 // ====== Rendering Layer Types ======

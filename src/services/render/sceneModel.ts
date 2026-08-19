@@ -66,8 +66,8 @@ export function getSkinById(id: string | undefined, skins: UISkin[] = []): UISki
 }
 
 const defaultPresentation: NonNullable<Scene['presentation']> = {
-  framingMode: 'snap-content',
-  maxZoom: 3.2,
+  framingMode: 'fit-code',
+  maxZoom: 1.35,
   motionPreset: 'typewriter',
   fxPreset: 'none',
   fxIntensity: 0.55,
@@ -88,6 +88,65 @@ const defaultAnimation: SceneAnimationSettings = {
   cursorBlinkRate: 530,
 };
 
+export interface ContentMetrics {
+  contentLineCount: number;
+  longestLineLength: number;
+  contentWidthPx: number;
+  contentHeightPx: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function resolveContentMetrics(
+  source: string,
+  appearance: Pick<SceneAppearance, 'fontSizePx' | 'lineHeightPx' | 'letterSpacingPx' | 'contentPaddingPx' | 'gutterWidthPx' | 'titleBarHeightPx'>,
+): ContentMetrics {
+  const lines = source.split('\n');
+  const lastContentLine = Math.max(0, lines.reduce((last, line, index) => line.trim().length > 0 ? index : last, 0));
+  const contentLineCount = Math.max(1, lastContentLine + 1);
+  const contentLines = lines.slice(0, contentLineCount);
+  const longestLineLength = Math.max(1, ...contentLines.map(line => line.length));
+  const estimatedCharWidth = Math.max(5, appearance.fontSizePx * 0.61 + appearance.letterSpacingPx);
+  const contentWidthPx = Math.max(
+    160,
+    appearance.gutterWidthPx + appearance.contentPaddingPx * 2 + longestLineLength * estimatedCharWidth,
+  );
+  const contentHeightPx = Math.max(
+    appearance.lineHeightPx,
+    contentLineCount * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx,
+  );
+
+  return { contentLineCount, longestLineLength, contentWidthPx, contentHeightPx };
+}
+
+export function resolveCodeLinesViewportLines(width: number, height: number): number {
+  // Keep the viewport stable for a given output shape while allowing small
+  // square/landscape exports to remain readable.
+  void width;
+  return clamp(Math.round(height / 140), 8, 18);
+}
+
+export function resolveCodeLinesDimensions(
+  width: number,
+  height: number,
+  source: string,
+  appearance: Pick<SceneAppearance, 'fontSizePx' | 'lineHeightPx' | 'letterSpacingPx' | 'contentPaddingPx' | 'gutterWidthPx' | 'titleBarHeightPx'>,
+  presentation: NonNullable<Scene['presentation']>,
+): { width: number; height: number; viewportLines: number } {
+  const metrics = resolveContentMetrics(source, appearance);
+  const zoom = clamp(presentation.maxZoom, 0.5, 4);
+  const viewportLines = Math.min(metrics.contentLineCount, resolveCodeLinesViewportLines(width, height));
+  const outputWidth = Math.max(2, Math.ceil(metrics.contentWidthPx * zoom));
+  const outputHeight = Math.max(2, Math.ceil((viewportLines * appearance.lineHeightPx + appearance.contentPaddingPx * 2) * zoom));
+  return {
+    width: outputWidth & ~1,
+    height: outputHeight & ~1,
+    viewportLines: Math.max(1, viewportLines),
+  };
+}
+
 function resolveAdaptiveFrame(
   width: number,
   height: number,
@@ -96,52 +155,39 @@ function resolveAdaptiveFrame(
   windowChrome: WindowChromeConfig,
   presentation: NonNullable<Scene['presentation']>,
 ): Pick<SceneAppearance, 'frameX' | 'frameY' | 'frameWidthPx' | 'frameHeightPx' | 'contentFitScale'> {
-  const lines = source.split('\n');
-  const longestLine = Math.max(1, ...lines.map(line => line.length));
-  const estimatedCharWidth = Math.max(5, appearance.fontSizePx * 0.61 + appearance.letterSpacingPx);
-  const baseWidth = Math.max(240, appearance.gutterWidthPx + appearance.contentPaddingPx * 2 + longestLine * estimatedCharWidth);
-  const lastContentLine = Math.max(0, lines.reduce((last, line, index) => line.trim().length > 0 ? index : last, 0));
-  const contentLineCount = Math.max(1, lastContentLine + 1);
-  const baseHeight = Math.max(appearance.lineHeightPx * 2, contentLineCount * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx);
-  const outerMargin = presentation.framingMode === 'fill-canvas' || presentation.framingMode === 'snap-content' ? 0 : windowChrome.margin;
+  const metrics = resolveContentMetrics(source, appearance);
+  const mode = presentation.framingMode;
+  if (mode === 'code-lines') {
+    return {
+      frameX: 0,
+      frameY: 0,
+      frameWidthPx: width,
+      frameHeightPx: height,
+      contentFitScale: clamp(presentation.maxZoom, 0.5, 4),
+    };
+  }
+
+  const outerMargin = mode === 'fill-canvas' ? 0 : Math.max(0, windowChrome.margin);
   const availableWidth = Math.max(1, width - outerMargin * 2);
   const availableHeight = Math.max(1, height - outerMargin * 2);
-  const fitScale = Math.min(availableWidth / baseWidth, availableHeight / baseHeight);
-  // Fit-to-code should preserve readability for short snippets instead of
-  // shrinking a one- or two-line window into the middle of a portrait canvas.
-  // The target occupancy scales down as content grows, then the canvas remains
-  // the hard upper bound for long source files.
-  const lineOccupancyTarget = Math.max(0.48, Math.min(0.84, 0.84 - Math.max(0, lines.length - 2) * 0.014));
-  const minimumOccupancyScale = Math.min(
-    availableWidth / (baseWidth / 0.84),
-    availableHeight * lineOccupancyTarget / baseHeight,
+  const nativeFitScale = Math.min(
+    availableWidth / metrics.contentWidthPx,
+    availableHeight / metrics.contentHeightPx,
   );
-  const snapHeightTarget = Math.max(0.3, Math.min(0.64, 0.64 - Math.max(0, contentLineCount - 8) * 0.004));
-  const snapContentScale = Math.min(
-    availableWidth / baseWidth,
-    (availableHeight * snapHeightTarget) / baseHeight,
-    Math.max(1, presentation.maxZoom),
-  );
-  const contentFitScale = presentation.framingMode === 'fill-canvas'
-    ? 1
-    : presentation.framingMode === 'snap-content'
-      ? Math.max(0.5, snapContentScale)
-      : Math.min(fitScale, Math.max(1, minimumOccupancyScale), Math.max(1, presentation.maxZoom));
-  const frameWidthPx = presentation.framingMode === 'fill-canvas' || presentation.framingMode === 'snap-content'
+  const maxZoom = clamp(presentation.maxZoom, 0.25, 4);
+  const contentFitScale = mode === 'fill-canvas'
+    ? Math.max(0.1, nativeFitScale)
+    : Math.max(0.1, Math.min(nativeFitScale, maxZoom));
+  const frameWidthPx = mode === 'fill-canvas'
     ? availableWidth
-    : Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
-  const snapBottomPadding = Math.max(12, appearance.contentPaddingPx * 1.5) * contentFitScale;
-  const frameHeightPx = presentation.framingMode === 'fill-canvas'
+    : Math.min(availableWidth, metrics.contentWidthPx * contentFitScale);
+  const frameHeightPx = mode === 'fill-canvas'
     ? availableHeight
-    : presentation.framingMode === 'snap-content'
-      ? Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale + snapBottomPadding))
-      : Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
+    : Math.min(availableHeight, metrics.contentHeightPx * contentFitScale);
 
   return {
     frameX: Math.round((width - frameWidthPx) / 2),
-    frameY: presentation.framingMode === 'snap-content'
-      ? Math.max(0, Math.round(height - frameHeightPx))
-      : Math.round((height - frameHeightPx) / 2),
+    frameY: Math.round((height - frameHeightPx) / 2),
     frameWidthPx,
     frameHeightPx,
     contentFitScale,
@@ -153,6 +199,17 @@ export function resizeSceneAppearance(
   width: number,
   height: number,
 ): SceneAppearance {
+  if (model.presentation.framingMode === 'code-lines') {
+    const codeLinesScale = clamp(width / Math.max(1, model.appearance.contentWidthPx), 0.5, 4);
+    return {
+      ...model.appearance,
+      frameX: 0,
+      frameY: 0,
+      frameWidthPx: width,
+      frameHeightPx: height,
+      contentFitScale: codeLinesScale,
+    };
+  }
   const frame = resolveAdaptiveFrame(width, height, model.source, model.appearance, model.windowChrome, model.presentation);
   return { ...model.appearance, ...frame };
 }
@@ -167,7 +224,7 @@ export function resolveSceneRenderModel(
   if (!theme) throw new Error('No code theme is available for this scene.');
   const background = getBackgroundById(scene.backgroundPresetId);
   const skin = options.skin || getSkinById(undefined, options.skins);
-  const dimensions = resolveDimensions(project.aspectRatio, project.customWidth, project.customHeight);
+  const platformDimensions = resolveDimensions(project.aspectRatio, project.customWidth, project.customHeight);
   const fps: 30 | 60 = options.fps === 60 ? 60 : 30;
   const presentation = { ...defaultPresentation, ...(scene.presentation || {}) };
   const audio = { ...defaultAudio, ...(scene.audio || {}) };
@@ -188,14 +245,19 @@ export function resolveSceneRenderModel(
     letterSpacingPx: scene.typography.letterSpacing || 0,
     contentPaddingPx: Math.max(0, scene.windowChrome.padding),
     gutterWidthPx: 52,
-    titleBarHeightPx: scene.windowChrome.style === 'none' ? 0 : 38,
+    titleBarHeightPx: presentation.framingMode === 'code-lines' || scene.windowChrome.style === 'none' ? 0 : 38,
   };
+  const metrics = resolveContentMetrics(parsed.cleanSource, baseAppearance);
+  const codeLinesDimensions = presentation.framingMode === 'code-lines'
+    ? resolveCodeLinesDimensions(platformDimensions.width, platformDimensions.height, parsed.cleanSource, baseAppearance, presentation)
+    : null;
+  const dimensions = codeLinesDimensions || platformDimensions;
   const frame = resolveAdaptiveFrame(dimensions.width, dimensions.height, parsed.cleanSource, baseAppearance, scene.windowChrome, presentation);
   const appearance: SceneAppearance = {
     ...baseAppearance,
     ...frame,
     framingMode: presentation.framingMode,
-    maxZoom: presentation.maxZoom,
+    maxZoom: clamp(presentation.maxZoom, 0.5, 4),
     fxPreset: presentation.fxPreset,
     fxIntensity: presentation.fxIntensity,
     motionPreset: presentation.motionPreset,
@@ -205,6 +267,10 @@ export function resolveSceneRenderModel(
     cursorFollow: animation.cursorFollow,
     cursorBlink: animation.cursorBlink,
     cursorBlinkRate: animation.cursorBlinkRate,
+    contentLineCount: metrics.contentLineCount,
+    contentWidthPx: metrics.contentWidthPx,
+    codeLinesViewportLines: codeLinesDimensions?.viewportLines
+      || resolveCodeLinesViewportLines(platformDimensions.width, platformDimensions.height),
   };
   const timeline = buildTimelineFromSource({
     source: parsed.cleanSource,

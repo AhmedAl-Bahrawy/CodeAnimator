@@ -33,6 +33,7 @@ export function getStateAtTime(
     visibleLines: [],
     tokens: [],
     cursorLine: 0,
+    cameraLine: 0,
     cursorCol: 0,
     activeHighlightRange: null,
     focusLine: null,
@@ -169,7 +170,24 @@ export function getStateAtTime(
   state.visibleLines = visibleLines;
   state.visibleText = visibleLines.join('\n');
   state.cursorLine = currentLine;
+  state.cameraLine = currentLine;
   state.cursorCol = resolveFollowColumn(sourceLines[currentLine] || '', exactColumn, options.cursorFollow || 'exact');
+
+  // Move the camera during the short handoff between lines instead of
+  // snapping it on the first character of the next line. This is deterministic
+  // because it is derived only from the playhead and timeline event timestamps.
+  const nextLineEvent = events.slice(eventCount).find((event) => {
+    if (event.type !== 'type-char' && event.type !== 'type-word' && event.type !== 'type-line') return false;
+    const line = Number((event.payload as { line?: number }).line);
+    return Number.isFinite(line) && line > currentLine;
+  });
+  if (nextLineEvent) {
+    const handoffMs = 180;
+    const handoffStart = Math.max(0, nextLineEvent.tMs - handoffMs);
+    const progress = Math.min(1, Math.max(0, (clampedTimeMs - handoffStart) / handoffMs));
+    const nextLine = Number((nextLineEvent.payload as { line?: number }).line);
+    state.cameraLine = currentLine + (nextLine - currentLine) * progress;
+  }
 
   return state;
 }
