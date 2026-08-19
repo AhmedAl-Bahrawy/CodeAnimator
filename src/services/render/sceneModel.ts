@@ -67,7 +67,7 @@ export function getSkinById(id: string | undefined, skins: UISkin[] = []): UISki
 
 const defaultPresentation: NonNullable<Scene['presentation']> = {
   framingMode: 'fit-code',
-  maxZoom: 1.65,
+  maxZoom: 3.2,
   motionPreset: 'typewriter',
   fxPreset: 'none',
   fxIntensity: 0.55,
@@ -104,9 +104,18 @@ function resolveAdaptiveFrame(
   const availableWidth = Math.max(1, width - windowChrome.margin * 2);
   const availableHeight = Math.max(1, height - windowChrome.margin * 2);
   const fitScale = Math.min(availableWidth / baseWidth, availableHeight / baseHeight);
+  // Fit-to-code should preserve readability for short snippets instead of
+  // shrinking a one- or two-line window into the middle of a portrait canvas.
+  // The target occupancy scales down as content grows, then the canvas remains
+  // the hard upper bound for long source files.
+  const lineOccupancyTarget = Math.max(0.48, Math.min(0.84, 0.84 - Math.max(0, lines.length - 2) * 0.014));
+  const minimumOccupancyScale = Math.min(
+    availableWidth / (baseWidth / 0.84),
+    availableHeight * lineOccupancyTarget / baseHeight,
+  );
   const contentFitScale = presentation.framingMode === 'fill-canvas'
     ? 1
-    : Math.min(fitScale, Math.max(1, presentation.maxZoom));
+    : Math.min(fitScale, Math.max(1, minimumOccupancyScale), Math.max(1, presentation.maxZoom));
   const frameWidthPx = Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
   const frameHeightPx = Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
 

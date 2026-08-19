@@ -3,6 +3,7 @@ import h264BundleUrl from 'h264-mp4-encoder/embuild/dist/h264-mp4-encoder.web.js
 import { highlightCode } from '@/services/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
 import type { ExportOptions, CodeToken } from '@/types/domain';
+import { getExportQualityProfile } from './quality';
 
 interface H264EncoderGlobal {
   createH264MP4Encoder: () => Promise<H264MP4Encoder>;
@@ -89,7 +90,8 @@ export async function h264Mp4FallbackExporter(
   if (signal?.aborted) return new Blob([], { type: 'video/mp4' });
 
   const { timeline, source, language, typingConfig, theme, background, windowChrome,
-    typography, skin, width, height, fps, playbackSpeedMultiplier } = opts;
+    typography, skin, width, height, fps, quality, playbackSpeedMultiplier } = opts;
+  const qualityProfile = getExportQualityProfile(quality);
   const encoderApi = await loadH264Encoder();
   const encodeWidth = Math.max(2, width - (width % 2));
   const encodeHeight = Math.max(2, height - (height % 2));
@@ -103,9 +105,9 @@ export async function h264Mp4FallbackExporter(
     encoder.width = encodeWidth;
     encoder.height = encodeHeight;
     encoder.frameRate = fps;
-    encoder.kbps = 6_000;
-    encoder.speed = 10;
-    encoder.groupOfPictures = Math.max(1, fps * 2);
+    encoder.kbps = Math.round(qualityProfile.videoBitrate / 1000);
+    encoder.speed = 3;
+    encoder.groupOfPictures = Math.max(1, Math.round(fps * qualityProfile.keyframeIntervalSeconds));
     encoder.initialize();
 
     const tokenLines = await resolveTokenLines(source, language, theme.shikiTheme || theme.id);

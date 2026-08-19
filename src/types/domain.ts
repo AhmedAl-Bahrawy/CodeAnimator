@@ -215,6 +215,7 @@ export interface BackgroundPreset {
 
 // ====== Export Types ======
 export type ExportFormat = 'mp4' | 'webm' | 'gif';
+export type ExportQuality = 'high' | 'ultra';
 export type ExportTier = 'webcodecs' | 'mediarecorder' | 'ffmpeg-wasm' | 'gif';
 
 export interface ExportOptions {
@@ -233,6 +234,7 @@ export interface ExportOptions {
   height: number;
   fps: 30 | 60;
   format: ExportFormat;
+  quality: ExportQuality;
   playbackSpeedMultiplier: number;
 }
 

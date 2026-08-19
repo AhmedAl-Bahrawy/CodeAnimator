@@ -8,11 +8,13 @@ import { Separator } from '@/ui/separator';
 import { platformPresets } from '@/data/platformPresets';
 import { selectExporter } from '@/services/export';
 import { resolveSceneRenderModel, resizeSceneAppearance } from '@/services/render/sceneModel';
-import type { ExportFormat } from '@/types/domain';
+import { getExportDimensions, getExportQualityProfile } from '@/services/export/quality';
+import type { ExportFormat, ExportQuality } from '@/types/domain';
 
 export function ExportPanel() {
   const {
     format, setFormat,
+    quality, setQuality,
     fps, setFps,
     playbackSpeedMultiplier, setPlaybackSpeed,
     isExporting, progress,
@@ -48,8 +50,9 @@ export function ExportPanel() {
   // Override dimensions from platform preset only when a real preset is
   // selected — "project-default" respects the project's own aspect ratio (BLK-04).
   const selectedPresetData = platformPresets.find(p => p.id === selectedPreset);
-  const exportWidth = selectedPresetData ? selectedPresetData.width : projectDimensions.w;
-  const exportHeight = selectedPresetData ? selectedPresetData.height : projectDimensions.h;
+  const logicalExportWidth = selectedPresetData ? selectedPresetData.width : projectDimensions.w;
+  const logicalExportHeight = selectedPresetData ? selectedPresetData.height : projectDimensions.h;
+  const { width: exportWidth, height: exportHeight } = getExportDimensions(logicalExportWidth, logicalExportHeight, quality, format);
 
   // Warn when the timeline exceeds the selected platform's max duration.
   const durationWarning = useMemo(() => {
@@ -120,6 +123,7 @@ export function ExportPanel() {
           height: exportHeight,
           fps,
           format,
+          quality,
           playbackSpeedMultiplier,
         },
         (pct) => setProgress(pct),
@@ -182,6 +186,7 @@ export function ExportPanel() {
         </Select>
         <div className="text-[10px] text-[var(--text-muted)]">
           Output: {exportWidth}x{exportHeight}px
+          {format !== 'gif' && ` · ${getExportQualityProfile(quality).label}`}
           {selectedPreset === 'project-default' && currentProject?.aspectRatio !== 'custom' && ` (${currentProject?.aspectRatio || '9:16'})`}
         </div>
         {durationWarning && (
@@ -190,6 +195,19 @@ export function ExportPanel() {
       </div>
 
       <Separator />
+
+      {/* Quality */}
+      <div className="space-y-2">
+        <Label>Output Quality</Label>
+        <Select value={quality} onValueChange={(value) => setQuality(value as ExportQuality)}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="high">High quality · 1.5× resolution</SelectItem>
+            <SelectItem value="ultra">Ultra quality · 2× resolution</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="text-[10px] text-[var(--text-muted)]">{getExportQualityProfile(quality).description}{format === 'gif' ? ' GIF keeps the selected canvas size.' : ''}</div>
+      </div>
 
       {/* Format */}
       <div className="space-y-2">

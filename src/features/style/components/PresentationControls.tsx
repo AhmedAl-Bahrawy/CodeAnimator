@@ -25,11 +25,11 @@ export function PresentationControls({ presentation, audio, onPresentationChange
               <SelectItem value="fill-canvas">Fill canvas</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-[10px] text-[var(--text-muted)]">Fit to code keeps short snippets compact instead of stretching across the full TikTok frame.</p>
+          <p className="text-[10px] text-[var(--text-muted)]">Fit to code keeps long files inside the canvas while giving short snippets a strong, readable screen presence.</p>
         </div>
         <div className="space-y-2">
           <Label>Maximum zoom: {presentation.maxZoom.toFixed(2)}×</Label>
-          <Slider value={[presentation.maxZoom]} onValueChange={([value]) => onPresentationChange({ maxZoom: value })} min={1} max={2.4} step={0.05} />
+          <Slider value={[presentation.maxZoom]} onValueChange={([value]) => onPresentationChange({ maxZoom: value })} min={1} max={3.2} step={0.05} />
         </div>
         <div className="space-y-2">
           <Label>Animation preset</Label>

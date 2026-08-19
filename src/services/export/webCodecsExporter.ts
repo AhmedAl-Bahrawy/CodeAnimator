@@ -7,15 +7,16 @@ import { Muxer as Mp4Muxer, ArrayBufferTarget as Mp4Target } from 'mp4-muxer';
 import { Muxer as WebmMuxer, ArrayBufferTarget as WebmTarget } from 'webm-muxer';
 import { encodeTimelineAudio, resolveMp4AudioEncoding } from './audioTrack';
 import { remuxFallbackMp4WithAudio } from './fallbackAudioMp4';
+import { getExportQualityProfile } from './quality';
 
-async function checkCodecSupport(codec: string, width: number, height: number, fps: number): Promise<boolean> {
+async function checkCodecSupport(codec: string, width: number, height: number, fps: number, bitrate: number): Promise<boolean> {
   try {
     if (!('VideoEncoder' in window)) return false;
     const result = await VideoEncoder.isConfigSupported({
       codec,
       width,
       height,
-      bitrate: 8_000_000,
+      bitrate,
       framerate: fps,
     });
     return result.supported === true;
@@ -31,8 +32,9 @@ export const webCodecsExporter: Exporter = {
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
     const {
       timeline, source, language, typingConfig, theme, background, windowChrome,
-      typography, skin, width, height, fps, format, playbackSpeedMultiplier,
+      typography, skin, width, height, fps, format, quality, playbackSpeedMultiplier,
     } = opts;
+    const qualityProfile = getExportQualityProfile(quality);
 
     if (!('VideoEncoder' in window)) {
       if (format === 'mp4') {
@@ -57,7 +59,7 @@ export const webCodecsExporter: Exporter = {
     let webmMuxerCodec = 'V_VP9';
 
     if (format === 'mp4') {
-      if (!(await checkCodecSupport(mp4Codec, width, height, fps))) {
+      if (!(await checkCodecSupport(mp4Codec, width, height, fps, qualityProfile.videoBitrate))) {
         const fallbackVideo = await h264Mp4FallbackExporter(opts, onProgress, signal);
         return opts.audio?.enabled && opts.audio.cueId !== 'none'
           ? remuxFallbackMp4WithAudio(fallbackVideo, opts, onProgress, signal)
@@ -67,7 +69,7 @@ export const webCodecsExporter: Exporter = {
     } else {
       let supportedWebmCodec: (typeof webmCodecCandidates)[number] | null = null;
       for (const candidate of webmCodecCandidates) {
-        if (await checkCodecSupport(candidate.encoderCodec, width, height, fps)) {
+        if (await checkCodecSupport(candidate.encoderCodec, width, height, fps, qualityProfile.videoBitrate)) {
           supportedWebmCodec = candidate;
           break;
         }
@@ -119,7 +121,7 @@ export const webCodecsExporter: Exporter = {
     const mp4Target = useMp4 ? new Mp4Target() : null;
     const webmTarget = useMp4 ? null : new WebmTarget();
     const includeAudio = useMp4 && opts.audio?.enabled === true && opts.audio.cueId !== 'none';
-    const audioEncoding = includeAudio ? await resolveMp4AudioEncoding() : null;
+    const audioEncoding = includeAudio ? await resolveMp4AudioEncoding(48_000, qualityProfile.audioBitrate) : null;
     if (includeAudio && !audioEncoding) {
       throw new Error('This browser cannot encode AAC or Opus audio for MP4 export.');
     }
@@ -186,7 +188,7 @@ export const webCodecsExporter: Exporter = {
         codec,
         width,
         height,
-        bitrate: 8_000_000,
+        bitrate: qualityProfile.videoBitrate,
         framerate: fps,
         latencyMode: 'quality',
         ...(useMp4 && codec === mp4Codec ? { avc: { format: 'avc' as const } } : {}),
@@ -209,7 +211,7 @@ export const webCodecsExporter: Exporter = {
         const timestamp = Math.round((frame.frameIndex / fps) * 1_000_000);
         const duration = Math.max(1, Math.round(1_000_000 / fps));
         const videoFrame = new VideoFrame(frame.bitmap, { timestamp, duration });
-        encoder.encode(videoFrame, { keyFrame: frame.frameIndex % Math.max(1, fps * 2) === 0 });
+        encoder.encode(videoFrame, { keyFrame: frame.frameIndex % Math.max(1, Math.round(fps * qualityProfile.keyframeIntervalSeconds)) === 0 });
         videoFrame.close();
         frame.bitmap.close();
         onProgress(5 + Math.round((frame.frameIndex / totalFrames) * 85));

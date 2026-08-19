@@ -1,4 +1,5 @@
 import type { Exporter, ExportOptions, CodeToken } from '@/types/domain';
+import { getExportQualityProfile } from './quality';
 import { highlightCode } from '@/services/highlighting/shiki';
 import { RenderCoordinator } from './renderCoordinator';
 
@@ -7,7 +8,8 @@ export const mediaRecorderExporter: Exporter = {
   isSupported: typeof window !== 'undefined' && 'MediaRecorder' in window && typeof HTMLCanvasElement.prototype.captureStream === 'function',
 
   async export(opts: ExportOptions, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<Blob> {
-    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, skin, width, height, fps, playbackSpeedMultiplier } = opts;
+    const { timeline, source, language, typingConfig, theme, background, windowChrome, typography, skin, width, height, fps, quality, playbackSpeedMultiplier } = opts;
+    const qualityProfile = getExportQualityProfile(quality);
 
     if (!this.isSupported) {
       throw new Error('MediaRecorder not supported');
@@ -37,7 +39,7 @@ export const mediaRecorderExporter: Exporter = {
 
     const recorder = new MediaRecorder(stream, {
       mimeType,
-      videoBitsPerSecond: 8_000_000,
+      videoBitsPerSecond: qualityProfile.videoBitrate,
     });
 
     const chunks: Blob[] = [];

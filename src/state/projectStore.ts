@@ -51,7 +51,7 @@ const defaultTypography: TypographySettings = {
 
 const defaultPresentation = {
   framingMode: 'fit-code' as const,
-  maxZoom: 1.65,
+  maxZoom: 3.2,
   motionPreset: 'typewriter' as const,
   fxPreset: 'none' as const,
   fxIntensity: 0.55,

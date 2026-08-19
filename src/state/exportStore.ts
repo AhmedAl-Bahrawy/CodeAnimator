@@ -1,11 +1,12 @@
 import { create } from 'zustand';
-import type { ExportFormat, ExportTier } from '@/types/domain';
+import type { ExportFormat, ExportQuality, ExportTier } from '@/types/domain';
 
 interface ExportStore {
   // State
   isExporting: boolean;
   progress: number;
   format: ExportFormat;
+  quality: ExportQuality;
   fps: 30 | 60;
   playbackSpeedMultiplier: number;
   selectedTier: ExportTier | null;
@@ -13,6 +14,7 @@ interface ExportStore {
 
   // Actions
   setFormat: (format: ExportFormat) => void;
+  setQuality: (quality: ExportQuality) => void;
   setFps: (fps: 30 | 60) => void;
   setPlaybackSpeed: (multiplier: number) => void;
   setSelectedTier: (tier: ExportTier | null) => void;
@@ -29,12 +31,14 @@ export const useExportStore = create<ExportStore>((set, get) => ({
   isExporting: false,
   progress: 0,
   format: 'mp4',
+  quality: 'high',
   fps: 30,
   playbackSpeedMultiplier: 1,
   selectedTier: null,
   abortController: null,
 
   setFormat: (format) => set({ format }),
+  setQuality: (quality) => set({ quality }),
   setFps: (fps) => set({ fps }),
   setPlaybackSpeed: (multiplier) => set({ playbackSpeedMultiplier: multiplier }),
   setSelectedTier: (tier) => set({ selectedTier: tier }),

@@ -60,10 +60,10 @@ async function supportsAudioCodec(encoding: Mp4AudioEncoding): Promise<boolean> 
   }
 }
 
-export async function resolveMp4AudioEncoding(sampleRate = DEFAULT_SAMPLE_RATE): Promise<Mp4AudioEncoding | null> {
+export async function resolveMp4AudioEncoding(sampleRate = DEFAULT_SAMPLE_RATE, bitrate = 192_000): Promise<Mp4AudioEncoding | null> {
   const candidates: Mp4AudioEncoding[] = [
-    { muxerCodec: 'aac', encoderCodec: 'mp4a.40.2', sampleRate, numberOfChannels: 1, bitrate: 128_000 },
-    { muxerCodec: 'opus', encoderCodec: 'opus', sampleRate, numberOfChannels: 1, bitrate: 96_000 },
+    { muxerCodec: 'aac', encoderCodec: 'mp4a.40.2', sampleRate, numberOfChannels: 1, bitrate },
+    { muxerCodec: 'opus', encoderCodec: 'opus', sampleRate, numberOfChannels: 1, bitrate: Math.max(128_000, Math.round(bitrate * 0.75)) },
   ];
   for (const candidate of candidates) {
     if (await supportsAudioCodec(candidate)) return candidate;
