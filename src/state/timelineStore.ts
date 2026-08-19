@@ -26,7 +26,12 @@ export const useTimelineStore = create<TimelineStore>((set, get) => ({
   isPlaying: false,
   currentTimeMs: 0,
 
-  setTimeline: (timeline, cleanSource) => set({ timeline, cleanSource }),
+  setTimeline: (timeline, cleanSource) => set({
+    timeline,
+    cleanSource,
+    currentTimeMs: 0,
+    isPlaying: false,
+  }),
 
   play: () => set({ isPlaying: true }),
 

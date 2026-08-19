@@ -1,11 +1,25 @@
-import type { Timeline, CanvasState, TypingConfig } from '@/types/domain';
+import type { Timeline, CanvasState, CursorFollowMode, TypingConfig } from '@/types/domain';
 import { binarySearchTime } from '@/lib/utils';
+
+export interface ReplayOptions {
+  cursorFollow?: CursorFollowMode;
+}
+
+function resolveFollowColumn(sourceLine: string, exactColumn: number, follow: CursorFollowMode): number {
+  const col = Math.max(0, Math.min(exactColumn, sourceLine.length));
+  if (follow === 'exact' || col === 0 || col >= sourceLine.length) return col;
+  if (follow === 'line-end') return 0;
+  const prefix = sourceLine.slice(0, col);
+  if (/\s$/.test(prefix) || /\s/.test(sourceLine[col] || '')) return col;
+  return Math.max(0, Math.max(prefix.lastIndexOf(' '), prefix.lastIndexOf('\t')) + 1);
+}
 
 export function getStateAtTime(
   timeline: Timeline,
   tMs: number,
   source: string,
-  _typingConfig: TypingConfig
+  typingConfig: TypingConfig,
+  options: ReplayOptions = {},
 ): CanvasState {
   const { events } = timeline;
   const sourceLines = source.split('\n');
@@ -14,7 +28,7 @@ export function getStateAtTime(
   const state: CanvasState = {
     playheadMs: clampedTimeMs,
     cursorVisible: true,
-    animationProgress: Math.min(1, clampedTimeMs / Math.max(1, timeline.totalDurationMs)),
+    animationProgress: Math.min(1, clampedTimeMs / Math.max(1, timeline.contentDurationMs)),
     visibleText: '',
     visibleLines: [],
     tokens: [],
@@ -24,11 +38,11 @@ export function getStateAtTime(
     focusLine: null,
     scrollOffsetPx: 0,
     zoomLevel: 1,
-    typingSpeed: _typingConfig.baseSpeed,
+    typingSpeed: typingConfig.baseSpeed,
   };
 
   // Find how many events to replay up to tMs
-  const eventCount = binarySearchTime(events, tMs);
+  const eventCount = binarySearchTime(events, clampedTimeMs);
 
   // Nothing has happened yet — show empty state
   if (eventCount === 0) {
@@ -36,9 +50,9 @@ export function getStateAtTime(
   }
 
   // Build visible text by replaying events
-  const lineBuffers: string[][] = sourceLines.map(() => []);
+  const lineBuffers: (string | undefined)[][] = sourceLines.map(() => []);
   let currentLine = 0;
-  let currentCol = 0;
+  let exactColumn = 0;
 
   for (let i = 0; i < eventCount; i++) {
     const event = events[i];
@@ -46,13 +60,13 @@ export function getStateAtTime(
     switch (event.type) {
       case 'type-char': {
         const p = event.payload as { line: number; col: number; char: string };
-        currentLine = p.line;
+        currentLine = Math.max(0, Math.min(p.line, sourceLines.length - 1));
         if (p.char === '\n') {
           // Newline: advance to next line
-          currentLine = p.line + 1;
-          currentCol = 0;
+          currentLine = Math.min(sourceLines.length - 1, p.line + 1);
+          exactColumn = 0;
         } else {
-          currentCol = p.col + 1;
+          exactColumn = p.col + 1;
           if (lineBuffers[p.line]) {
             lineBuffers[p.line][p.col] = p.char;
           }
@@ -61,9 +75,9 @@ export function getStateAtTime(
       }
       case 'type-word': {
         const p = event.payload as { line: number; text: string; startCol?: number; endCol?: number };
-        currentLine = p.line;
+        currentLine = Math.max(0, Math.min(p.line, sourceLines.length - 1));
         const col = p.startCol ?? (lineBuffers[p.line]?.join('').length || 0);
-        currentCol = p.endCol ?? col + p.text.length;
+        exactColumn = p.endCol ?? col + p.text.length;
         if (lineBuffers[p.line]) {
           for (let ci = 0; ci < p.text.length; ci += 1) {
             lineBuffers[p.line][col + ci] = p.text[ci];
@@ -73,8 +87,8 @@ export function getStateAtTime(
       }
       case 'type-line': {
         const p = event.payload as { line: number; text: string; endCol: number };
-        currentLine = p.line;
-        currentCol = p.endCol;
+        currentLine = Math.max(0, Math.min(p.line, sourceLines.length - 1));
+        exactColumn = p.endCol;
         if (lineBuffers[p.line]) {
           for (let ci = 0; ci < p.text.length; ci++) {
             lineBuffers[p.line][ci] = p.text[ci];
@@ -84,8 +98,8 @@ export function getStateAtTime(
       }
       case 'cursor-jump': {
         const p = event.payload as { line: number; col: number };
-        currentLine = p.line;
-        currentCol = p.col;
+        currentLine = Math.max(0, Math.min(p.line, sourceLines.length - 1));
+        exactColumn = p.col;
         break;
       }
       case 'set-highlight': {
@@ -124,7 +138,7 @@ export function getStateAtTime(
           lineBuffers[li] = [];
         }
         currentLine = 0;
-        currentCol = 0;
+        exactColumn = 0;
         break;
       }
       case 'pause':
@@ -155,7 +169,7 @@ export function getStateAtTime(
   state.visibleLines = visibleLines;
   state.visibleText = visibleLines.join('\n');
   state.cursorLine = currentLine;
-  state.cursorCol = currentCol;
+  state.cursorCol = resolveFollowColumn(sourceLines[currentLine] || '', exactColumn, options.cursorFollow || 'exact');
 
   return state;
 }

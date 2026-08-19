@@ -4,7 +4,7 @@ import { TopBar } from './shell/TopBar';
 import { CodeInput, LanguagePicker, MarkupLintPanel, PresetLibraryDrawer, useSceneEditor } from './features/editor';
 import { CanvasPreview } from './features/preview';
 import { CodeThemeGallery, BackgroundPicker, WindowChromeControls, TypographyControls, UISkinGallery, BrandKitManager } from './features/style';
-import { AnimationPanel } from './features/animation';
+import { AnimationPanel, useAnimationTransport } from './features/animation';
 import { ExportPanel, AspectRatioSelector } from './features/export';
 import { useProjectStore, useUISkinStore } from './state';
 import { resolveSceneRenderModel } from './services/render/sceneModel';
@@ -30,6 +30,15 @@ function App() {
   const currentScene = currentProject ? currentProject.scenes[currentSceneIndex] || null : null;
   const skins = useUISkinStore(s => s.skins);
   const currentSkinId = useUISkinStore(s => s.currentSkinId);
+  const {
+    timeline,
+    currentTimeMs,
+    isPlaying,
+    play: playTimeline,
+    pause: pauseTimeline,
+    reset: resetAnimation,
+    seek: seekTimeline,
+  } = useAnimationTransport();
   const currentSkin = useMemo(
     () => skins.find(skin => skin.id === currentSkinId) || skins[0],
     [skins, currentSkinId],
@@ -167,6 +176,13 @@ function App() {
                     onPresentationChange={handlePresentationChange}
                     onTypingChange={handleTypingChange}
                     onAudioChange={handleAudioChange}
+                    timeline={timeline}
+                    currentTimeMs={currentTimeMs}
+                    isPlaying={isPlaying}
+                    onPlay={playTimeline}
+                    onPause={pauseTimeline}
+                    onReset={resetAnimation}
+                    onSeek={seekTimeline}
                   />
                 )}
               </TabsContent>
@@ -231,6 +247,13 @@ function App() {
                 onPresentationChange={handlePresentationChange}
                 onTypingChange={handleTypingChange}
                 onAudioChange={handleAudioChange}
+                timeline={timeline}
+                currentTimeMs={currentTimeMs}
+                isPlaying={isPlaying}
+                onPlay={playTimeline}
+                onPause={pauseTimeline}
+                onReset={resetAnimation}
+                onSeek={seekTimeline}
               />
             </div>
           )}

@@ -25,6 +25,7 @@ export function getAnimationFrameMetrics(
   timeMs: number,
   totalDurationMs: number,
   appearance: SceneAppearance,
+  contentDurationMs = totalDurationMs,
 ): AnimationFrameMetrics {
   const safeTime = Math.max(0, Math.min(timeMs, Math.max(1, totalDurationMs)));
   const introRaw = appearance.introDurationMs <= 0 ? 1 : safeTime / appearance.introDurationMs;
@@ -33,7 +34,7 @@ export function getAnimationFrameMetrics(
     : (totalDurationMs - safeTime) / appearance.outroDurationMs;
   const introProgress = easeAnimation(introRaw, appearance.animationEasing);
   const outroProgress = easeAnimation(outroRaw, appearance.animationEasing);
-  const revealProgress = clamp01(safeTime / Math.max(1, totalDurationMs));
+  const revealProgress = clamp01(safeTime / Math.max(1, contentDurationMs));
   const settledProgress = Math.min(introProgress, outroProgress);
   const motion = appearance.motionPreset;
 

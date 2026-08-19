@@ -11,8 +11,9 @@ import type {
   ScenePresentationSettings,
   SoundCueId,
   TypingConfig,
+  Timeline,
 } from '@/types/domain';
-import { TypingBehaviorControls } from '@/features/style/components/TypingBehaviorControls';
+import { TypingBehaviorControls } from './TypingBehaviorControls';
 
 interface AnimationPanelProps {
   animation: SceneAnimationSettings;
@@ -23,6 +24,13 @@ interface AnimationPanelProps {
   onPresentationChange: (updates: Partial<ScenePresentationSettings>) => void;
   onTypingChange: (updates: Partial<TypingConfig>) => void;
   onAudioChange: (updates: Partial<SceneAudioSettings>) => void;
+  timeline: Timeline | null;
+  currentTimeMs: number;
+  isPlaying: boolean;
+  onPlay: () => void;
+  onPause: () => void;
+  onReset: () => void;
+  onSeek: (timeMs: number) => void;
 }
 
 export function AnimationPanel({
@@ -34,6 +42,13 @@ export function AnimationPanel({
   onPresentationChange,
   onTypingChange,
   onAudioChange,
+  timeline,
+  currentTimeMs,
+  isPlaying,
+  onPlay,
+  onPause,
+  onReset,
+  onSeek,
 }: AnimationPanelProps) {
   return (
     <div className="space-y-6">
@@ -45,12 +60,37 @@ export function AnimationPanel({
           </div>
           <span className="rounded-full border border-[var(--accent)]/40 px-2 py-1 text-[9px] text-[var(--accent)]">SYNCED</span>
         </div>
-        <div className="h-2 rounded-full bg-[var(--bg-base)] overflow-hidden">
-          <div className="h-full w-1/3 rounded-full bg-[var(--accent)]" />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            className="h-7 text-[10px]"
+            onClick={isPlaying ? onPause : onPlay}
+            disabled={!timeline}
+          >
+            {isPlaying ? 'Pause' : 'Play'}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={onReset} disabled={!timeline}>
+            Reset
+          </Button>
+          <span className="ml-auto font-mono text-[10px] text-[var(--text-muted)]">
+            {Math.round(currentTimeMs)} / {Math.round(timeline?.totalDurationMs || 0)} ms
+          </span>
         </div>
+        <input
+          type="range"
+          min={0}
+          max={timeline?.totalDurationMs || 1}
+          step={1}
+          value={Math.min(currentTimeMs, timeline?.totalDurationMs || 1)}
+          onChange={(event) => onSeek(Number(event.target.value))}
+          aria-label="Animation timeline"
+          className="w-full accent-[var(--accent)] cursor-pointer"
+          disabled={!timeline}
+        />
         <div className="flex justify-between text-[9px] text-[var(--text-muted)] font-mono">
           <span>INTRO {animation.introDurationMs}ms</span>
-          <span>CONTENT</span>
+          <span>REVEAL {Math.round(timeline?.contentDurationMs || 0)}ms</span>
           <span>OUTRO {animation.outroDurationMs}ms</span>
         </div>
       </div>

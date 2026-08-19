@@ -35,7 +35,9 @@ export function TypingBehaviorControls({ config, onChange }: TypingBehaviorContr
 
       {/* Typing Speed */}
       <div className="space-y-2">
-        <Label>Speed: {config.baseSpeed} chars/sec</Label>
+        <Label>
+          Speed: {config.baseSpeed} {config.mode === 'character' ? 'chars/sec' : config.mode === 'word' ? 'units/sec' : 'lines/sec'}
+        </Label>
         <Slider
           value={[config.baseSpeed]}
           onValueChange={([v]) => onChange({ baseSpeed: v })}

@@ -1,5 +1,6 @@
 import type { CanvasState, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, TypingConfig, CodeToken } from '@/types/domain';
 import { getAnimationFrameMetrics, getCursorVisibility } from '@/services/animation/frameModel';
+import { clipTokenLinesToVisibleLines } from './visibleTokens';
 import {
   drawBackground,
   drawMargin,
@@ -29,17 +30,18 @@ export interface RenderFrameOptions {
   fps: number;
   timeMs: number;
   totalDurationMs: number;
+  contentDurationMs?: number;
   visibleLines: string[];
   tokenLines: CodeToken[][] | null;
 }
 
 export function renderFrame(options: RenderFrameOptions): void {
-  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, skin, appearance, frameIndex, fps, timeMs, totalDurationMs, visibleLines, tokenLines } = options;
+  const { ctx, width, height, state, theme, background, windowChrome, typography, typingConfig, skin, appearance, frameIndex, fps, timeMs, totalDurationMs, contentDurationMs, visibleLines, tokenLines } = options;
 
   ctx.clearRect(0, 0, width, height);
 
   // Motion is sampled from the same playhead in preview and exports.
-  const motion = getAnimationFrameMetrics(timeMs, totalDurationMs, appearance);
+  const motion = getAnimationFrameMetrics(timeMs, totalDurationMs, appearance, contentDurationMs ?? totalDurationMs);
   const zoom = state.zoomLevel || 1;
   const cameraScale = zoom * motion.scale;
   const cameraX = motion.translateX;
@@ -95,7 +97,7 @@ export function renderFrame(options: RenderFrameOptions): void {
   drawLineNumbers(renderCtx, visibleLines);
 
   // Layer 6: Syntax Highlighted Text
-  drawCodeText(renderCtx, visibleLines, tokenLines);
+  drawCodeText(renderCtx, visibleLines, clipTokenLinesToVisibleLines(tokenLines, visibleLines));
 
   // Layer 7: Highlight/Focus Overlay
   drawHighlightOverlay(renderCtx, visibleLines);

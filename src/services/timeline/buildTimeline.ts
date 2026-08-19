@@ -8,12 +8,12 @@ export interface TimelineBuildOptions {
 }
 
 /**
- * Build one deterministic event stream for preview and export.
+ * Compiles the clean source into one deterministic event stream.
  *
- * `baseSpeed` always means visible units per second for the selected mode:
- * characters, word/whitespace segments, or lines. Every typing event carries
- * its absolute source column so replay never has to infer positions from
- * already-rendered text.
+ * Speeds are visible units per second: characters for character mode, word /
+ * whitespace segments for word mode, and lines for line mode. Every reveal
+ * event carries absolute source coordinates so replay never infers positions
+ * from partially rendered text.
  */
 export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline {
   const { source, typingConfig, fps, markupEvents = [] } = options;
@@ -34,12 +34,22 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
     perLineMarkup.set(lineIndex, lineEvents);
   }
 
-  const unitDurationMs = (speed: number): number =>
-    1000 / Math.max(1, speed);
+  const unitDurationMs = (speed: number): number => 1000 / Math.max(1, speed);
 
   let currentTimeMs = 0;
   let currentSpeed = Math.max(1, typingConfig.baseSpeed);
+  let lastRevealTimeMs = 0;
   events.push({ tMs: 0, type: 'cursor-jump', payload: { line: 0, col: 0 } });
+
+  const emitTypingEvent = (
+    type: TimelineEvent['type'],
+    payload: Record<string, unknown>,
+    units = 1,
+  ) => {
+    currentTimeMs += unitDurationMs(currentSpeed) * Math.max(0.01, units);
+    lastRevealTimeMs = currentTimeMs;
+    events.push({ tMs: currentTimeMs, type, payload });
+  };
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
@@ -63,11 +73,6 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
         payload: { ...markupEvent.payload },
       });
     }
-
-    const emitTypingEvent = (type: TimelineEvent['type'], payload: Record<string, unknown>, units = 1) => {
-      currentTimeMs += unitDurationMs(currentSpeed) * Math.max(0.01, units);
-      events.push({ tMs: currentTimeMs, type, payload });
-    };
 
     if (typingConfig.mode === 'line') {
       emitTypingEvent('type-line', {
@@ -113,12 +118,12 @@ export function buildTimelineFromSource(options: TimelineBuildOptions): Timeline
     }
   }
 
-  const totalDurationMs = events.length > 0
-    ? events[events.length - 1].tMs + 1800
-    : 1800;
+  const contentDurationMs = Math.max(0, currentTimeMs);
+  const totalDurationMs = Math.max(1800, contentDurationMs + 1800);
 
   return {
-    totalDurationMs: Math.max(1800, totalDurationMs),
+    totalDurationMs,
+    contentDurationMs: Math.max(contentDurationMs, lastRevealTimeMs),
     events,
     fps,
   };

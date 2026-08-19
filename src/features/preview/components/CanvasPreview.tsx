@@ -147,10 +147,9 @@ export function CanvasPreview() {
 
     const state = forceFullSource
       ? buildFullSourceState() || getStateAtTime(tl, timeMs, model.source, model.typingConfig)
-      : getStateAtTime(tl, timeMs, model.source, model.typingConfig);
-    const visibleTokenLines = tokenLines
-      ? state.visibleLines.map((_, index) => tokenLines[index] || [])
-      : null;
+      : getStateAtTime(tl, timeMs, model.source, model.typingConfig, {
+        cursorFollow: model.animation.cursorFollow,
+      });
 
     renderFrame({
       ctx: context,
@@ -169,7 +168,8 @@ export function CanvasPreview() {
       timeMs: state.playheadMs,
       totalDurationMs: tl.totalDurationMs,
       visibleLines: state.visibleLines,
-      tokenLines: visibleTokenLines,
+      contentDurationMs: tl.contentDurationMs,
+      tokenLines,
     });
   }, [sceneModel, currentSkin, tokenLines, buildFullSourceState]);
 
@@ -210,7 +210,7 @@ export function CanvasPreview() {
       }
       currentTimeRef.current = nextTime;
       seek(nextTime);
-      renderFnRef.current?.(nextTime, false);
+      renderFnRef.current?.(nextTime);
       if (isPlayingRef.current) animationRef.current = requestAnimationFrame(animate);
     };
 
@@ -219,7 +219,7 @@ export function CanvasPreview() {
   }, [isPlaying, timeline, sceneModel, seek]);
 
   useEffect(() => {
-    if (!isPlaying) renderFrameAt(currentTimeMs, true);
+    if (!isPlaying) renderFrameAt(currentTimeMs, false);
   }, [isPlaying, currentTimeMs, renderFrameAt]);
 
   useEffect(() => {

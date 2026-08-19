@@ -1,4 +1,4 @@
-import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken, UISkin, SceneAppearance } from '@/types/domain';
+import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, UISkin, SceneAppearance, CodeToken } from '@/types/domain';
 import { renderFrame } from '@/services/render/renderFrame';
 import { getStateAtTime } from '@/services/timeline/getStateAtTime';
 
@@ -92,12 +92,9 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
       // Sample the source timeline faster or slower while keeping the output
       // frame rate stable. The coordinator emits fewer frames for faster speed.
       const tMs = (frameIndex / config.fps) * 1000 * (config.speedMultiplier || 1);
-      const state = getStateAtTime(config.timeline, tMs, config.source, config.typingConfig);
-
-      // Map pre-computed token lines to visible lines
-      const tokenLinesForFrame: CodeToken[][] | null = config.tokenLines
-        ? state.visibleLines.map((_, lineIdx) => config!.tokenLines![lineIdx] || [])
-        : null;
+      const state = getStateAtTime(config.timeline, tMs, config.source, config.typingConfig, {
+        cursorFollow: config.appearance.cursorFollow,
+      });
 
       renderFrame({
         ctx: ctx as unknown as CanvasRenderingContext2D,
@@ -115,8 +112,9 @@ self.onmessage = (e: MessageEvent<WorkerInMessage>) => {
         fps: config.fps,
         timeMs: state.playheadMs,
         totalDurationMs: config.timeline.totalDurationMs,
+        contentDurationMs: config.timeline.contentDurationMs,
         visibleLines: state.visibleLines,
-        tokenLines: tokenLinesForFrame,
+        tokenLines: config.tokenLines,
       });
 
       // Create ImageBitmap and transfer it back

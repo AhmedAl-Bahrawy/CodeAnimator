@@ -27,7 +27,10 @@ export interface TimelineEvent {
 }
 
 export interface Timeline {
+  /** Full scene duration, including intro/outro and the final hold. */
   totalDurationMs: number;
+  /** Duration through the last source reveal event, excluding the final hold. */
+  contentDurationMs: number;
   events: TimelineEvent[];
   fps: number;
 }
