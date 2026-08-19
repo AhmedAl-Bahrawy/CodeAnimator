@@ -1,4 +1,5 @@
 export { BackgroundPicker } from './components/BackgroundPicker';
+export { DesignPanel } from './components/DesignPanel';
 export { BrandKitManager } from './components/BrandKitManager';
 export { CodeThemeGallery } from './components/CodeThemeGallery';
 export { PresentationControls } from './components/PresentationControls';

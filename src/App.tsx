@@ -3,9 +3,9 @@ import { AppShell } from './shell/AppShell';
 import { TopBar } from './shell/TopBar';
 import { CodeInput, LanguagePicker, MarkupLintPanel, PresetLibraryDrawer, useSceneEditor } from './features/editor';
 import { CanvasPreview } from './features/preview';
-import { CodeThemeGallery, BackgroundPicker, WindowChromeControls, TypographyControls, UISkinGallery, BrandKitManager } from './features/style';
+import { DesignPanel } from './features/style';
 import { AnimationPanel, useAnimationTransport } from './features/animation';
-import { ExportPanel, AspectRatioSelector } from './features/export';
+import { ExportPanel } from './features/export';
 import { useProjectStore, useUISkinStore } from './state';
 import { resolveSceneRenderModel } from './services/render/sceneModel';
 import { useApplicationRuntime } from './shell/useApplicationRuntime';
@@ -21,7 +21,7 @@ function App() {
   const updateScene = useProjectStore(s => s.updateScene);
   const updateProject = useProjectStore(s => s.updateProject);
 
-  const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'animations' | 'preview'>('editor');
+  const [mobileTab, setMobileTab] = useState<'editor' | 'design' | 'animations' | 'preview' | 'export'>('editor');
   const [showPresets, setShowPresets] = useState(false);
   const [showProjectManager, setShowProjectManager] = useState(false);
 
@@ -132,36 +132,22 @@ function App() {
 
         {/* Right panel - Style & Export */}
         <div className="w-[300px] flex flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)] shrink-0 overflow-hidden">
-          <Tabs defaultValue="theme" className="flex flex-col h-full">
+          <Tabs defaultValue="design" className="flex flex-col h-full">
             <TabsList className="mx-3 mt-3">
-              <TabsTrigger value="theme" className="text-xs flex-1">Theme</TabsTrigger>
-              <TabsTrigger value="style" className="text-xs flex-1">Style</TabsTrigger>
+              <TabsTrigger value="design" className="text-xs flex-1">Design</TabsTrigger>
               <TabsTrigger value="animations" className="text-xs flex-1">Animate</TabsTrigger>
-              <TabsTrigger value="skins" className="text-xs flex-1">Skins</TabsTrigger>
               <TabsTrigger value="export" className="text-xs flex-1">Export</TabsTrigger>
             </TabsList>
 
             <div className="flex-1 overflow-y-auto">
-              <TabsContent value="theme" className="p-3 m-0">
-                <CodeThemeGallery />
-              </TabsContent>
-
-              <TabsContent value="style" className="p-3 m-0 space-y-5">
-                <BackgroundPicker
-                  currentBackgroundId={currentScene.backgroundPresetId}
-                  onChange={handleBackgroundChange}
-                />
-                <WindowChromeControls
-                  config={currentScene.windowChrome}
-                  onChange={handleWindowChromeChange}
-                />
-                <TypographyControls
-                  settings={currentScene.typography}
-                  onChange={(updates) => handleTypographyChange(updates)}
-                />
-                <AspectRatioSelector
-                  value={currentProject?.aspectRatio || '9:16'}
-                  onChange={handleAspectRatioChange}
+              <TabsContent value="design" className="p-3 m-0">
+                <DesignPanel
+                  scene={currentScene}
+                  aspectRatio={currentProject?.aspectRatio || '9:16'}
+                  onBackgroundChange={handleBackgroundChange}
+                  onWindowChromeChange={handleWindowChromeChange}
+                  onTypographyChange={handleTypographyChange}
+                  onAspectRatioChange={handleAspectRatioChange}
                 />
               </TabsContent>
 
@@ -185,11 +171,6 @@ function App() {
                     onSeek={seekTimeline}
                   />
                 )}
-              </TabsContent>
-
-              <TabsContent value="skins" className="p-3 m-0 space-y-5">
-                <UISkinGallery />
-                <BrandKitManager />
               </TabsContent>
 
               <TabsContent value="export" className="m-0 p-0">
@@ -223,20 +204,24 @@ function App() {
               </div>
             </div>
           )}
-          {mobileTab === 'style' && (
-            <div className="h-full overflow-y-auto p-3 space-y-5">
-              <CodeThemeGallery />
-              <BackgroundPicker
-                currentBackgroundId={currentScene.backgroundPresetId}
-                onChange={handleBackgroundChange}
-              />
-              <WindowChromeControls
-                config={currentScene.windowChrome}
-                onChange={handleWindowChromeChange}
+          {mobileTab === 'design' && (
+            <div className="h-full overflow-y-auto p-3">
+              <DesignPanel
+                scene={currentScene}
+                aspectRatio={currentProject?.aspectRatio || '9:16'}
+                onBackgroundChange={handleBackgroundChange}
+                onWindowChromeChange={handleWindowChromeChange}
+                onTypographyChange={handleTypographyChange}
+                onAspectRatioChange={handleAspectRatioChange}
               />
             </div>
           )}
-          {mobileTab === 'animations' && sceneModel && (
+          {mobileTab === 'export' && (
+            <div className="h-full overflow-y-auto">
+              <ExportPanel />
+            </div>
+          )}
+          {mobileTab === 'preview' && sceneModel && (
             <div className="h-full overflow-y-auto p-3">
               <AnimationPanel
                 animation={sceneModel.animation}
@@ -266,7 +251,7 @@ function App() {
 
         {/* Mobile tab bar */}
         <div className="flex border-t border-[var(--border)] bg-[var(--bg-elevated)]">
-          {(['editor', 'style', 'animations', 'preview'] as const).map((tab) => (
+          {(['editor', 'design', 'animations', 'preview', 'export'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setMobileTab(tab)}

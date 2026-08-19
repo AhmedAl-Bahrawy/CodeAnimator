@@ -42,7 +42,7 @@ const before = await page.evaluate(() => {
   };
 });
 
-await page.getByRole('tab', { name: 'Skins' }).click();
+await page.getByRole('tab', { name: 'Design' }).click();
 await page.waitForTimeout(200);
 const skinButtons = page.locator('button').filter({ hasText: /^Terminal Green$/ });
 const skinCount = await skinButtons.count();

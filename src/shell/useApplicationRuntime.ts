@@ -37,7 +37,7 @@ export function useApplicationRuntime({
         const saved = await loadAllProjects();
         if (cancelled) return;
         if (saved.length > 0) {
-          const framingMigrationKey = 'codereel-edge-to-edge-framing-v1';
+          const framingMigrationKey = 'codereel-snap-content-framing-v2';
           const shouldMigrateFraming = localStorage.getItem(framingMigrationKey) !== '1';
           const hydratedProjects = shouldMigrateFraming
             ? saved.map(savedProject => ({
@@ -45,7 +45,7 @@ export function useApplicationRuntime({
                 scenes: savedProject.scenes.map(savedScene => ({
                   ...savedScene,
                   presentation: {
-                    framingMode: 'fill-canvas' as const,
+                    framingMode: 'snap-content' as const,
                     maxZoom: Math.max(3.2, savedScene.presentation?.maxZoom || 0),
                     motionPreset: savedScene.presentation?.motionPreset || 'typewriter',
                     fxPreset: savedScene.presentation?.fxPreset || 'none',

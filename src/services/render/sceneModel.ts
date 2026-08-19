@@ -66,7 +66,7 @@ export function getSkinById(id: string | undefined, skins: UISkin[] = []): UISki
 }
 
 const defaultPresentation: NonNullable<Scene['presentation']> = {
-  framingMode: 'fill-canvas',
+  framingMode: 'snap-content',
   maxZoom: 3.2,
   motionPreset: 'typewriter',
   fxPreset: 'none',
@@ -100,8 +100,10 @@ function resolveAdaptiveFrame(
   const longestLine = Math.max(1, ...lines.map(line => line.length));
   const estimatedCharWidth = Math.max(5, appearance.fontSizePx * 0.61 + appearance.letterSpacingPx);
   const baseWidth = Math.max(240, appearance.gutterWidthPx + appearance.contentPaddingPx * 2 + longestLine * estimatedCharWidth);
-  const baseHeight = Math.max(appearance.lineHeightPx * 2, lines.length * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx);
-  const outerMargin = presentation.framingMode === 'fill-canvas' ? 0 : windowChrome.margin;
+  const lastContentLine = Math.max(0, lines.reduce((last, line, index) => line.trim().length > 0 ? index : last, 0));
+  const contentLineCount = Math.max(1, lastContentLine + 1);
+  const baseHeight = Math.max(appearance.lineHeightPx * 2, contentLineCount * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx);
+  const outerMargin = presentation.framingMode === 'fill-canvas' || presentation.framingMode === 'snap-content' ? 0 : windowChrome.margin;
   const availableWidth = Math.max(1, width - outerMargin * 2);
   const availableHeight = Math.max(1, height - outerMargin * 2);
   const fitScale = Math.min(availableWidth / baseWidth, availableHeight / baseHeight);
@@ -114,19 +116,32 @@ function resolveAdaptiveFrame(
     availableWidth / (baseWidth / 0.84),
     availableHeight * lineOccupancyTarget / baseHeight,
   );
+  const snapHeightTarget = Math.max(0.3, Math.min(0.64, 0.64 - Math.max(0, contentLineCount - 8) * 0.004));
+  const snapContentScale = Math.min(
+    availableWidth / baseWidth,
+    (availableHeight * snapHeightTarget) / baseHeight,
+    Math.max(1, presentation.maxZoom),
+  );
   const contentFitScale = presentation.framingMode === 'fill-canvas'
     ? 1
-    : Math.min(fitScale, Math.max(1, minimumOccupancyScale), Math.max(1, presentation.maxZoom));
-  const frameWidthPx = presentation.framingMode === 'fill-canvas'
+    : presentation.framingMode === 'snap-content'
+      ? Math.max(0.5, snapContentScale)
+      : Math.min(fitScale, Math.max(1, minimumOccupancyScale), Math.max(1, presentation.maxZoom));
+  const frameWidthPx = presentation.framingMode === 'fill-canvas' || presentation.framingMode === 'snap-content'
     ? availableWidth
     : Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
+  const snapBottomPadding = Math.max(12, appearance.contentPaddingPx * 1.5) * contentFitScale;
   const frameHeightPx = presentation.framingMode === 'fill-canvas'
     ? availableHeight
-    : Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
+    : presentation.framingMode === 'snap-content'
+      ? Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale + snapBottomPadding))
+      : Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
 
   return {
     frameX: Math.round((width - frameWidthPx) / 2),
-    frameY: Math.round((height - frameHeightPx) / 2),
+    frameY: presentation.framingMode === 'snap-content'
+      ? Math.max(0, Math.round(height - frameHeightPx))
+      : Math.round((height - frameHeightPx) / 2),
     frameWidthPx,
     frameHeightPx,
     contentFitScale,

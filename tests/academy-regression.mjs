@@ -7,9 +7,9 @@ page.on('console', message => { if (message.type() === 'error') errors.push(`con
 page.on('pageerror', error => errors.push(`page: ${error.message}`));
 await page.goto('http://localhost:4180/', { waitUntil: 'networkidle', timeout: 30000 });
 await page.waitForTimeout(800);
-await page.getByRole('tab', { name: 'Skins' }).click();
-await page.getByText('Khwarizm Academy', { exact: true }).first().click();
-await page.waitForTimeout(500);
+await page.getByRole('tab', { name: 'Design' }).click();
+await page.getByText('Khwarizm Academy', { exact: true }).last().click();
+await page.waitForTimeout(800);
 const editor = page.locator('.cm-editor').first();
 const canvas = page.locator('canvas').first();
 const result = await page.evaluate(() => {

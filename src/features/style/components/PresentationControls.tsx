@@ -21,11 +21,12 @@ export function PresentationControls({ presentation, audio, onPresentationChange
           <Select value={presentation.framingMode} onValueChange={(value) => onPresentationChange({ framingMode: value as FramingMode })}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="snap-content">Snap to last line</SelectItem>
               <SelectItem value="fit-code">Fit to code</SelectItem>
-              <SelectItem value="fill-canvas">Edge-to-edge</SelectItem>
+              <SelectItem value="fill-canvas">Fill canvas</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-[10px] text-[var(--text-muted)]">Fit to code keeps long files inside the canvas while giving short snippets a strong, readable screen presence.</p>
+          <p className="text-[10px] text-[var(--text-muted)]">Snap to last line keeps the full width, grows with the code, and anchors the window to the final line. Fit to code preserves background space.</p>
         </div>
         <div className="space-y-2">
           <Label>Maximum zoom: {presentation.maxZoom.toFixed(2)}×</Label>

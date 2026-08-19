@@ -100,7 +100,7 @@ export interface WindowChromeConfig {
 }
 
 // ====== Scene ======
-export type FramingMode = 'fit-code' | 'fill-canvas';
+export type FramingMode = 'fit-code' | 'fill-canvas' | 'snap-content';
 export type MotionPreset = 'typewriter' | 'cinematic' | 'focus-reveal' | 'slide-in' | 'terminal-pulse';
 export type AnimationEasing = 'linear' | 'smooth' | 'snappy';
 export type CursorFollowMode = 'exact' | 'word-end' | 'line-end';
