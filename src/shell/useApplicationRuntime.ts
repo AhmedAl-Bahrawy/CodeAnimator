@@ -37,9 +37,27 @@ export function useApplicationRuntime({
         const saved = await loadAllProjects();
         if (cancelled) return;
         if (saved.length > 0) {
+          const framingMigrationKey = 'codereel-edge-to-edge-framing-v1';
+          const shouldMigrateFraming = localStorage.getItem(framingMigrationKey) !== '1';
+          const hydratedProjects = shouldMigrateFraming
+            ? saved.map(savedProject => ({
+                ...savedProject,
+                scenes: savedProject.scenes.map(savedScene => ({
+                  ...savedScene,
+                  presentation: {
+                    framingMode: 'fill-canvas' as const,
+                    maxZoom: Math.max(3.2, savedScene.presentation?.maxZoom || 0),
+                    motionPreset: savedScene.presentation?.motionPreset || 'typewriter',
+                    fxPreset: savedScene.presentation?.fxPreset || 'none',
+                    fxIntensity: savedScene.presentation?.fxIntensity ?? 0.55,
+                  },
+                })),
+              }))
+            : saved;
+          if (shouldMigrateFraming) localStorage.setItem(framingMigrationKey, '1');
           useProjectStore.setState({
-            projects: saved,
-            currentProjectId: saved[0].id,
+            projects: hydratedProjects,
+            currentProjectId: hydratedProjects[0].id,
             currentSceneIndex: 0,
           });
           await useUISkinStore.getState().loadCustomSkins();

@@ -66,7 +66,7 @@ export function getSkinById(id: string | undefined, skins: UISkin[] = []): UISki
 }
 
 const defaultPresentation: NonNullable<Scene['presentation']> = {
-  framingMode: 'fit-code',
+  framingMode: 'fill-canvas',
   maxZoom: 3.2,
   motionPreset: 'typewriter',
   fxPreset: 'none',
@@ -101,8 +101,9 @@ function resolveAdaptiveFrame(
   const estimatedCharWidth = Math.max(5, appearance.fontSizePx * 0.61 + appearance.letterSpacingPx);
   const baseWidth = Math.max(240, appearance.gutterWidthPx + appearance.contentPaddingPx * 2 + longestLine * estimatedCharWidth);
   const baseHeight = Math.max(appearance.lineHeightPx * 2, lines.length * appearance.lineHeightPx + appearance.contentPaddingPx * 2 + appearance.titleBarHeightPx);
-  const availableWidth = Math.max(1, width - windowChrome.margin * 2);
-  const availableHeight = Math.max(1, height - windowChrome.margin * 2);
+  const outerMargin = presentation.framingMode === 'fill-canvas' ? 0 : windowChrome.margin;
+  const availableWidth = Math.max(1, width - outerMargin * 2);
+  const availableHeight = Math.max(1, height - outerMargin * 2);
   const fitScale = Math.min(availableWidth / baseWidth, availableHeight / baseHeight);
   // Fit-to-code should preserve readability for short snippets instead of
   // shrinking a one- or two-line window into the middle of a portrait canvas.
@@ -116,8 +117,12 @@ function resolveAdaptiveFrame(
   const contentFitScale = presentation.framingMode === 'fill-canvas'
     ? 1
     : Math.min(fitScale, Math.max(1, minimumOccupancyScale), Math.max(1, presentation.maxZoom));
-  const frameWidthPx = Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
-  const frameHeightPx = Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
+  const frameWidthPx = presentation.framingMode === 'fill-canvas'
+    ? availableWidth
+    : Math.min(availableWidth, Math.max(1, baseWidth * contentFitScale));
+  const frameHeightPx = presentation.framingMode === 'fill-canvas'
+    ? availableHeight
+    : Math.min(availableHeight, Math.max(1, baseHeight * contentFitScale));
 
   return {
     frameX: Math.round((width - frameWidthPx) / 2),

@@ -17,3 +17,9 @@ This prevents a two-line snippet from becoming a tiny centered window in a portr
 ## Verification
 
 The production build and all existing regressions passed after the change. The media probe confirmed a High-quality MP4 at 1620×2880 with H.264 video and an audio stream, and a matching 1620×2880 WebM with VP9 video. The focused framing probe measured visible code pixels centered in a substantially larger footprint than the previous compact fit-to-code behavior.
+
+## Edge-to-edge framing
+
+The default presentation mode is now **Edge-to-edge** (`fill-canvas`). In this mode the canonical frame uses the complete output width and height, the outer window margin is removed, and the code surface reaches all four canvas boundaries. Existing saved projects receive a one-time migration through `codereel-edge-to-edge-framing-v1`; users can still select **Fit to code** when they prefer visible background around the window.
+
+The preview and all scaled export paths resolve the same full-canvas frame, so the edge contact is preserved in MP4, WebM, GIF, and the live canvas.

@@ -22,7 +22,7 @@ export function PresentationControls({ presentation, audio, onPresentationChange
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="fit-code">Fit to code</SelectItem>
-              <SelectItem value="fill-canvas">Fill canvas</SelectItem>
+              <SelectItem value="fill-canvas">Edge-to-edge</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-[10px] text-[var(--text-muted)]">Fit to code keeps long files inside the canvas while giving short snippets a strong, readable screen presence.</p>
