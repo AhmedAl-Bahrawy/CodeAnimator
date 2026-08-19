@@ -1,4 +1,4 @@
-import type { SnippetPreset } from '@/core/types';
+import type { SnippetPreset } from '@/types/domain';
 
 export const snippetPresets: SnippetPreset[] = [
   {

@@ -1,4 +1,4 @@
-import type { BackgroundPreset } from '@/core/types';
+import type { BackgroundPreset } from '@/types/domain';
 
 export const backgroundPresets: BackgroundPreset[] = [
   {

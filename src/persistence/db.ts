@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Project, CodeTheme, UISkin, BrandKit } from '@/core/types';
+import type { Project, CodeTheme, UISkin, BrandKit } from '@/types/domain';
 
 interface SavedProject {
   id: string;

@@ -1,5 +1,5 @@
 import db from './db';
-import type { CodeTheme } from '@/core/types';
+import type { CodeTheme } from '@/types/domain';
 
 export async function saveCustomTheme(theme: CodeTheme): Promise<void> {
   await db.themes.put({

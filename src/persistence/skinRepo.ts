@@ -1,5 +1,5 @@
 import db from './db';
-import type { UISkin } from '@/core/types';
+import type { UISkin } from '@/types/domain';
 
 export async function saveCustomSkin(skin: UISkin): Promise<void> {
   await db.skins.put({

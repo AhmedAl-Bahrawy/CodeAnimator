@@ -1,4 +1,4 @@
-import type { CodeTheme } from '@/core/types';
+import type { CodeTheme } from '@/types/domain';
 import { codeThemes } from './themes';
 
 export { codeThemes };

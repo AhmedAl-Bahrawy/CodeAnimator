@@ -1,4 +1,4 @@
-import type { UISkin } from '@/core/types';
+import type { UISkin } from '@/types/domain';
 
 export const uiSkins: UISkin[] = [
   {

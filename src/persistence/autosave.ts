@@ -1,6 +1,6 @@
 import { saveProject } from './projectRepo';
-import { useProjectStore } from '@/stores/projectStore';
-import type { Project } from '@/core/types';
+import { useProjectStore } from '@/state/projectStore';
+import type { Project } from '@/types/domain';
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSavedHash: string = '';

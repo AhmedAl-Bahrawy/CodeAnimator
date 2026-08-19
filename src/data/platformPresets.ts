@@ -1,4 +1,4 @@
-import type { PlatformPreset } from '@/core/types';
+import type { PlatformPreset } from '@/types/domain';
 
 export const platformPresets: PlatformPreset[] = [
   {

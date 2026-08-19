@@ -24,7 +24,13 @@
 
     /* Paths */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@features/*": ["./src/features/*"],
+      "@services/*": ["./src/services/*"],
+      "@state/*": ["./src/state/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@shell/*": ["./src/shell/*"],
+      "@types/*": ["./src/types/*"]
     }
   },
   "include": ["src"]

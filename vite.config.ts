@@ -12,6 +12,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': import.meta.dirname + '/src',
+      '@features': import.meta.dirname + '/src/features',
+      '@services': import.meta.dirname + '/src/services',
+      '@state': import.meta.dirname + '/src/state',
+      '@ui': import.meta.dirname + '/src/ui',
+      '@shell': import.meta.dirname + '/src/shell',
+      '@types': import.meta.dirname + '/src/types',
     },
   },
 })

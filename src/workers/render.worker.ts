@@ -1,6 +1,6 @@
-import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken, UISkin, SceneAppearance } from '@/core/types';
-import { renderFrame } from '@/core/render/renderFrame';
-import { getStateAtTime } from '@/core/timeline/getStateAtTime';
+import type { Timeline, TypingConfig, CodeTheme, BackgroundPreset, WindowChromeConfig, TypographySettings, CodeToken, UISkin, SceneAppearance } from '@/types/domain';
+import { renderFrame } from '@/services/render/renderFrame';
+import { getStateAtTime } from '@/services/timeline/getStateAtTime';
 
 /** Messages sent from main thread → worker */
 export type WorkerInMessage =

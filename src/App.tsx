@@ -1,29 +1,17 @@
-import { useEffect, useCallback, useMemo, useState } from 'react';
-import { AppShell } from './app/AppShell';
-import { TopBar } from './app/TopBar';
-import { CodeInput } from './components/editor/CodeInput';
-import { LanguagePicker } from './components/editor/LanguagePicker';
-import { CanvasPreview } from './components/preview/CanvasPreview';
-import { CodeThemeGallery } from './components/style/CodeThemeGallery';
-import { BackgroundPicker } from './components/style/BackgroundPicker';
-import { WindowChromeControls } from './components/style/WindowChromeControls';
-import { TypographyControls } from './components/style/TypographyControls';
-import { AnimationPanel } from './components/animation/AnimationPanel';
-import { ExportPanel } from './components/export/ExportPanel';
-import { AspectRatioSelector } from './components/export/AspectRatioSelector';
-import { useProjectStore, useTimelineStore, useUISkinStore, useThemeStore } from './stores';
-import { resolveSceneRenderModel, mergeVisibleSourceWithMarkup } from './core/render/sceneModel';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { Button } from './components/ui/button';
-import { UISkinGallery } from './components/style/UISkinGallery';
-import { BrandKitManager } from './components/style/BrandKitManager';
-import { PresetLibraryDrawer } from './components/editor/PresetLibraryDrawer';
-import { MarkupLintPanel } from './components/editor/MarkupLintPanel';
-import { ProjectManager } from './components/projects/ProjectManager';
-import { startAutosaveSubscription } from './persistence/autosave';
-import { loadAllProjects } from './persistence/projectRepo';
-import { getUISkinById } from './data/uiSkins';
-import { applySkinToDocument } from './stores/uiSkinStore';
+import { useMemo, useState } from 'react';
+import { AppShell } from './shell/AppShell';
+import { TopBar } from './shell/TopBar';
+import { CodeInput, LanguagePicker, MarkupLintPanel, PresetLibraryDrawer, useSceneEditor } from './features/editor';
+import { CanvasPreview } from './features/preview';
+import { CodeThemeGallery, BackgroundPicker, WindowChromeControls, TypographyControls, UISkinGallery, BrandKitManager } from './features/style';
+import { AnimationPanel } from './features/animation';
+import { ExportPanel, AspectRatioSelector } from './features/export';
+import { useProjectStore, useUISkinStore } from './state';
+import { resolveSceneRenderModel } from './services/render/sceneModel';
+import { useApplicationRuntime } from './shell/useApplicationRuntime';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
+import { ProjectManager } from './features/projects';
 
 function App() {
   const projects = useProjectStore(s => s.projects);
@@ -31,7 +19,7 @@ function App() {
   const currentSceneIndex = useProjectStore(s => s.currentSceneIndex);
   const createProject = useProjectStore(s => s.createProject);
   const updateScene = useProjectStore(s => s.updateScene);
-  const setTimeline = useTimelineStore(s => s.setTimeline);
+  const updateProject = useProjectStore(s => s.updateProject);
 
   const [mobileTab, setMobileTab] = useState<'editor' | 'style' | 'animations' | 'preview'>('editor');
   const [showPresets, setShowPresets] = useState(false);
@@ -52,135 +40,33 @@ function App() {
   }, [currentProject, currentScene, currentSkin]);
   const visibleSource = sceneModel?.source || '';
 
-  // Hydrate from IndexedDB on mount
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Always apply default skin CSS variables on mount first
-      const defaultSkin = getUISkinById('midnight');
-      applySkinToDocument(defaultSkin);
+  const { hydrated } = useApplicationRuntime({
+    project: currentProject,
+    scene: currentScene,
+    sceneModel,
+    currentSkin,
+    createProject,
+  });
 
-      try {
-        const saved = await loadAllProjects();
-        if (cancelled) return;
-        if (saved.length > 0) {
-          // Hydrate store with saved projects
-          useProjectStore.setState({
-            projects: saved,
-            currentProjectId: saved[0].id,
-            currentSceneIndex: 0,
-          });
-          // Restore custom UI skins and code themes persisted in IndexedDB (BLK-08)
-          await useUISkinStore.getState().loadCustomSkins();
-          await useThemeStore.getState().loadCustomThemes();
-
-          // Restore the selected built-in or custom UI skin after custom skins hydrate.
-          const savedSkinId = localStorage.getItem('codereel-skin-id');
-          if (savedSkinId) {
-            const hydratedSkins = useUISkinStore.getState().skins;
-            if (hydratedSkins.some(skin => skin.id === savedSkinId)) {
-              useUISkinStore.setState({ currentSkinId: savedSkinId });
-            }
-          }
-        } else {
-          createProject('My First Project');
-        }
-      } catch {
-        createProject('My First Project');
-      }
-      setHydrated(true);
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Keep the DOM shell synchronized with the exact skin consumed by the editor, canvas, and exporters.
-  useEffect(() => {
-    if (!currentSkin) return;
-    applySkinToDocument(currentSkin);
-    if (hydrated) localStorage.setItem('codereel-skin-id', currentSkin.id);
-  }, [currentSkin, hydrated]);
-
-  // Wire autosave subscription (HIGH-01)
-  useEffect(() => {
-    if (hydrated) startAutosaveSubscription(() => useProjectStore.getState().getCurrentProject());
-  }, [hydrated]);
-
-  // Build the exact same scene model consumed by preview and export.
-  useEffect(() => {
-    if (!currentProject || !currentScene) return;
-    if (!sceneModel) return;
-    setTimeline(sceneModel.timeline, sceneModel.source);
-  }, [currentProject, currentScene, sceneModel, setTimeline]);
-
-  const handleCodeChange = useCallback((value: string) => {
-    if (!currentProject || !currentScene) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      sourceWithMarkup: mergeVisibleSourceWithMarkup(currentScene.sourceWithMarkup, value),
-    });
-  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
-
-  const handleLanguageChange = useCallback((lang: string) => {
-    if (!currentProject) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      language: lang,
-    });
-  }, [currentProject, currentSceneIndex, updateScene]);
-
-  const handleBackgroundChange = useCallback((id: string) => {
-    if (!currentProject) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      backgroundPresetId: id,
-    });
-  }, [currentProject, currentSceneIndex, updateScene]);
-
-  const handleWindowChromeChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      windowChrome: { ...currentScene.windowChrome, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
-
-  const handleTypingChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      typingConfig: { ...currentScene.typingConfig, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
-
-  const handleTypographyChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      typography: { ...currentScene.typography, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, updateScene]);
-
-  const handlePresentationChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene || !sceneModel) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      presentation: { ...sceneModel.presentation, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
-
-  const handleAudioChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene || !sceneModel) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      audio: { ...sceneModel.audio, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
-
-  const handleAnimationChange = useCallback((updates: Record<string, unknown>) => {
-    if (!currentProject || !currentScene || !sceneModel) return;
-    updateScene(currentProject.id, currentSceneIndex, {
-      animation: { ...sceneModel.animation, ...updates },
-    });
-  }, [currentProject, currentScene, currentSceneIndex, sceneModel, updateScene]);
-
-  const handleAspectRatioChange = useCallback((value: string) => {
-    if (!currentProject) return;
-    useProjectStore.getState().updateProject(currentProject.id, { aspectRatio: value as '9:16' | '1:1' | '16:9' | 'custom' });
-  }, [currentProject]);
+  const {
+    handleCodeChange,
+    handleLanguageChange,
+    handleBackgroundChange,
+    handleWindowChromeChange,
+    handleTypingChange,
+    handleTypographyChange,
+    handlePresentationChange,
+    handleAudioChange,
+    handleAnimationChange,
+    handleAspectRatioChange,
+  } = useSceneEditor({
+    project: currentProject,
+    scene: currentScene,
+    sceneIndex: currentSceneIndex,
+    sceneModel,
+    updateScene,
+    updateProject,
+  });
 
   if (!hydrated || !currentScene) {
     return (

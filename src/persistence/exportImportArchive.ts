@@ -1,5 +1,5 @@
 import db from './db';
-import type { Project, CodeTheme, UISkin, BrandKit } from '@/core/types';
+import type { Project, CodeTheme, UISkin, BrandKit } from '@/types/domain';
 
 export interface ArchiveData {
   version: 1;

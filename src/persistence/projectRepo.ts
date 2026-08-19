@@ -1,5 +1,5 @@
 import db from './db';
-import type { Project } from '@/core/types';
+import type { Project } from '@/types/domain';
 
 export async function saveProject(project: Project): Promise<void> {
   await db.projects.put({

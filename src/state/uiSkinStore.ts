@@ -1,0 +1,173 @@
+import { create } from 'zustand';
+import type { UISkin, BrandKit } from '@/types/domain';
+import { uiSkins, getUISkinById } from '@/data/uiSkins';
+import { generateId } from '@/lib/utils';
+import { useProjectStore } from './projectStore';
+import {
+  saveCustomSkin as persistCustomSkin,
+  loadCustomSkins as persistLoadCustomSkins,
+  deleteCustomSkin as persistDeleteCustomSkin,
+} from '@/persistence/skinRepo';
+
+interface UISkinStore {
+  skins: UISkin[];
+  currentSkinId: string;
+  brandKits: BrandKit[];
+  currentBrandKitId: string | null;
+
+  setSkin: (id: string) => void;
+  addCustomSkin: (skin: UISkin) => void;
+  removeCustomSkin: (id: string) => void;
+  loadCustomSkins: () => Promise<void>;
+
+  createBrandKit: (name: string) => BrandKit;
+  setBrandKit: (id: string) => void;
+  updateBrandKit: (id: string, updates: Partial<BrandKit>) => void;
+  deleteBrandKit: (id: string) => void;
+  applyBrandKit: (id: string) => void;
+
+  getCurrentSkin: () => UISkin;
+}
+
+export const useUISkinStore = create<UISkinStore>((set, get) => ({
+  skins: uiSkins,
+  currentSkinId: 'midnight',
+  brandKits: [{
+    id: 'khwarizm-academy',
+    name: 'Khwarizm Academy',
+    isBuiltIn: true,
+    uiSkinId: 'khwarizm-academy',
+    codeThemeId: 'khwarizm-academy',
+    backgroundPresetId: 'khwarizm-space',
+    defaultAspectRatio: '9:16',
+  }],
+  currentBrandKitId: null,
+
+  setSkin: (id) => {
+    set({ currentSkinId: id });
+    const skin = getUISkinById(id);
+    applySkinToDocument(skin);
+  },
+
+  addCustomSkin: (skin) => {
+    set(state => ({
+      skins: [...state.skins, skin],
+    }));
+    // Persist custom skins to IndexedDB so they survive page reloads (BLK-08).
+    void persistCustomSkin(skin);
+  },
+
+  removeCustomSkin: (id) => {
+    set(state => ({
+      skins: state.skins.filter(s => s.id !== id),
+    }));
+    void persistDeleteCustomSkin(id);
+  },
+
+  /** Hydrate custom skins from IndexedDB — call once on app mount. */
+  loadCustomSkins: async () => {
+    try {
+      const custom = await persistLoadCustomSkins();
+      set({
+        skins: [
+          ...uiSkins,
+          ...custom.filter(c => !uiSkins.some(builtin => builtin.id === c.id)),
+        ],
+      });
+    } catch {
+      // Persistence unavailable — keep built-in skins only
+    }
+  },
+
+  createBrandKit: (name) => {
+    const { currentSkinId } = get();
+    const brandKit: BrandKit = {
+      id: generateId(),
+      name,
+      uiSkinId: currentSkinId,
+      codeThemeId: 'dracula',
+      backgroundPresetId: 'mesh-gradient-1',
+      defaultAspectRatio: '9:16',
+    };
+    set(state => ({
+      brandKits: [...state.brandKits, brandKit],
+      currentBrandKitId: brandKit.id,
+    }));
+    return brandKit;
+  },
+
+  setBrandKit: (id) => set({ currentBrandKitId: id }),
+
+  updateBrandKit: (id, updates) => set(state => ({
+    brandKits: state.brandKits.map(bk =>
+      bk.id === id ? { ...bk, ...updates } : bk
+    ),
+  })),
+
+  deleteBrandKit: (id) => set(state => ({
+    brandKits: state.brandKits.filter(bk => bk.id !== id),
+    currentBrandKitId: state.currentBrandKitId === id ? null : state.currentBrandKitId,
+  })),
+
+  applyBrandKit: (id) => {
+    const { brandKits } = get();
+    const kit = brandKits.find(bk => bk.id === id);
+    if (!kit) return;
+
+    // Apply UI skin
+    get().setSkin(kit.uiSkinId);
+    set({ currentBrandKitId: id });
+
+    // Apply brand kit theme/background to current scene
+    const projectState = useProjectStore.getState();
+    const project = projectState.projects.find(p => p.id === projectState.currentProjectId);
+    if (project) {
+      projectState.updateScene(project.id, projectState.currentSceneIndex, {
+        codeThemeId: kit.codeThemeId,
+        backgroundPresetId: kit.backgroundPresetId,
+      });
+      projectState.updateProject(project.id, {
+        brandKitId: id,
+        aspectRatio: kit.defaultAspectRatio,
+      });
+    }
+  },
+
+  getCurrentSkin: () => {
+    const { currentSkinId } = get();
+    return getUISkinById(currentSkinId);
+  },
+}));
+
+export function applySkinToDocument(skin: UISkin): void {
+  const root = document.documentElement;
+  const t = skin.tokens;
+
+  root.style.setProperty('--bg-base', t.bgBase);
+  root.style.setProperty('--bg-elevated', t.bgElevated);
+  root.style.setProperty('--bg-panel', t.bgPanel);
+  root.style.setProperty('--bg-surface', adjustColor(t.bgElevated, 10));
+  root.style.setProperty('--text-primary', t.textPrimary);
+  root.style.setProperty('--text-secondary', t.textSecondary);
+  root.style.setProperty('--text-muted', t.textMuted);
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--accent-foreground', t.accentForeground);
+  root.style.setProperty('--border', t.border);
+  root.style.setProperty('--border-strong', t.borderStrong);
+  root.style.setProperty('--danger', t.danger);
+  root.style.setProperty('--success', t.success);
+  root.style.setProperty('--warning', t.warning);
+  root.style.setProperty('--radius-sm', t.radiusSm);
+  root.style.setProperty('--radius-md', t.radiusMd);
+  root.style.setProperty('--radius-lg', t.radiusLg);
+  root.style.setProperty('--font-ui', t.fontUI);
+  root.style.setProperty('--font-mono', t.fontMono);
+}
+
+function adjustColor(hex: string, amount: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, Math.max(0, ((num >> 16) & 0xff) + amount));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + amount));
+  const b = Math.min(255, Math.max(0, (num & 0xff) + amount));
+  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
+}
